@@ -1,0 +1,68 @@
+project:
+  type: book
+  output-dir: docs
+  resources:
+    - exercises/*.R
+    - data/*.csv
+    - figures/*.png
+
+book:
+  title: "Learning R with Refugee Data"
+  subtitle: "A hands-on introduction to statistics, data visualization and research practice"
+  author:
+    - name: "Eréndira León-Salvador"
+      affiliation: "Postdoctoral Research Fellow · ERC RefLex: Is International Refugee Law Effective? · UCD College of Social Sciences & Law"
+  search: true
+  page-navigation: true
+  back-to-top-navigation: true
+  chapters:
+    - index.qmd
+    - part: "Part I · Getting started"
+      chapters:
+        - 00-install.qmd
+        - 01-first-steps.qmd
+        - 02-meet-the-data.qmd
+    - part: "Part II · Describe and visualize"
+      chapters:
+        - 03-wrangling.qmd
+        - 04-descriptive-statistics.qmd
+        - 05-visualization.qmd
+        - 06-time-trends.qmd
+    - part: "Part III · Comparing and inferring from data"
+      chapters:
+        - 07-applications-decisions.qmd
+        - 08-comparing-data.qmd
+        - 09-inference.qmd
+        - 10-lab.qmd
+    - part: "Appendices"
+      chapters:
+        - solutions.qmd
+        - glossary.qmd
+        - resources.qmd
+  page-footer:
+    left: "Learning R with Refugee Data · Eréndira León-Salvador · ERC RefLex"
+    right: "[✉ Email](mailto:erendira.leonsalvador@ucd.ie) · [UNHCR data](https://populationstatistics.github.io/refugees/)"
+
+format:
+  html:
+    theme: cosmo
+    css: styles.css
+    toc: true
+    toc-depth: 3
+    number-sections: true
+    code-copy: true
+    code-overflow: wrap
+    highlight-style: github
+    link-external-newwindow: true
+    fig-align: center
+    fig-width: 8
+    fig-height: 4.6
+
+execute:
+  echo: true
+  eval: true
+  warning: false
+  message: false
+  freeze: auto
+
+lang: en

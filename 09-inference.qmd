@@ -1,0 +1,890 @@
+---
+title: "From description to statistical inference"
+subtitle: "Correlation, OLS, regression tables, log transformations, and logistic regression"
+---
+
+::: {.callout-note title="Learning goals"}
+Distinguish description, inference, prediction, and causal explanation; calculate and visualize correlation; estimate OLS models; interpret coefficients, fitted values, residuals, standard errors, confidence intervals, p-values, and $R^2$; read and export regression tables; interpret log transformations and logistic regression in probabilities and odds; check basic model diagnostics. We will practice with **fictional asylum-system data**, not pretend that these regressions establish effects of real protection policies.
+:::
+
+## Why move beyond descriptive statistics?
+
+Previous sections described the data we have: how many people, which countries, which years, what proportions, and what the distributions look like. Regression lets us ask a different kind of question: **how does one measured variable tend to change when another changes?** Inference adds uncertainty: **how precisely can we estimate that relationship, and to what population or process might it apply?**
+
+Consider four questions:
+
+| Question | Type of analysis | Example |
+|---|---|---|
+| How long do cases take? | Description | Median processing duration in our observed jurisdictions |
+| Are staffing and processing times related? | Association | Correlation or regression slope |
+| What processing time would we expect in another jurisdiction? | Prediction | Fitted value from a model |
+| Would hiring additional staff *cause* decisions to be faster? | Causation | Requires a defensible research design |
+
+These are **not** interchangeable questions. A statistically significant association is not automatically a causal effect, and a predictive model need not be causal to be useful.
+
+::: {.callout-warning title="UNHCR data and the meaning of uncertainty"}
+A country-year table from UNHCR is not automatically a random sample of the world's countries. Reporting differences, missing data, administrative definitions, and selection into recorded cases can be more important than textbook sampling error. This section teaches statistical methods using deliberately constructed fictional data; applying them to UNHCR data requires separate measurement and research-design work.
+:::
+
+### The packages we will use
+
+Most estimation functions in this section, including `cor()`, `lm()`, and `glm()`, come with R. Other packages help us visualize, diagnose, and present results.
+
+Run the installation commands **once in the Console**, not at the top of every analysis script:
+
+```{r}
+#| eval: false
+install.packages(c(
+  "dplyr", "ggplot2", "broom", "stargazer",
+  "modelsummary", "sandwich", "lmtest", "knitr", "scales"
+))
+```
+
+Load packages needed for the examples:
+
+```{r}
+#| label: inference-setup
+#| message: false
+#| warning: false
+library(dplyr)
+library(ggplot2)
+library(broom)
+```
+
+We will call the formatting and diagnostic packages with `package::function()` so that it is always obvious which package supplies each function. The models use **one fixed random seed**, so readers running the same code with the same software setup should obtain the same simulated dataset.
+
+## 1. Start by exploring two variables
+
+Imagine a study of **160 fictional asylum-administration jurisdictions**. We record staff per 100 pending cases, an index of case complexity, an index of institutional resources, and average processing duration in months. All of these values are made up for teaching purposes.
+
+```{r}
+#| label: inference-data
+set.seed(2026)
+
+n_jurisdictions <- 160
+
+jurisdictions <- tibble(
+  jurisdiction = sprintf("J%03d", seq_len(n_jurisdictions)),
+  complexity = runif(n_jurisdictions, min = 0, max = 1),
+  resources = rnorm(n_jurisdictions, mean = 0, sd = 1)
+) |>
+  mutate(
+    staff_per_100 = pmax(
+      1.5,
+      6 + 1.4 * resources - 1.8 * complexity +
+        rnorm(n_jurisdictions, sd = 1)
+    ),
+    processing_months = pmax(
+      0.5,
+      16 - 0.7 * staff_per_100 + 4 * complexity -
+        0.6 * resources + rnorm(n_jurisdictions, sd = 1.8)
+    )
+  )
+
+head(jurisdictions)
+```
+
+We created the data using assumptions about how the fictional variables relate. That makes them useful for learning mechanics, but **real administrative data will not tell us the underlying process so conveniently**.
+
+```{r}
+jurisdictions |>
+  summarise(
+    number = n(),
+    mean_staff = mean(staff_per_100),
+    median_duration = median(processing_months),
+    minimum_duration = min(processing_months),
+    maximum_duration = max(processing_months)
+  )
+```
+
+Before fitting a model, **always inspect your variables and units**. Here an observation is a jurisdiction, *not* a person or an individual asylum decision; `staff_per_100` is staff per 100 pending cases, *not* the absolute number of employees.
+
+### Draw a scatterplot first
+
+```{r}
+#| label: fig-inference-scatter
+#| fig-cap: "Fictional jurisdictions: staffing and average processing duration. Each point represents one jurisdiction."
+ggplot(jurisdictions, aes(x = staff_per_100, y = processing_months)) +
+  geom_point(alpha = 0.65, color = "#2475a6") +
+  labs(
+    x = "Staff per 100 pending cases",
+    y = "Average processing duration (months)",
+    title = "Do more heavily staffed jurisdictions process cases faster?",
+    subtitle = "Fictional example: association only"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+Describe the **direction**, **strength**, **shape**, and any **unusual observations** before calculating a single coefficient. If the pattern is curved or dominated by one observation, a linear summary may be misleading.
+
+## 2. Correlation: the direction and strength of a linear relationship
+
+Pearson's correlation coefficient is
+
+$$
+r = \frac{\operatorname{Cov}(X,Y)}{s_Xs_Y}.
+$$
+
+It runs from $-1$ (perfect negative linear association) through $0$ (no linear association) to $+1$ (perfect positive linear association). A correlation near zero does **not** rule out a nonlinear relationship.
+
+```{r}
+cor(jurisdictions$staff_per_100, jurisdictions$processing_months)
+```
+
+Read the result as a statement about the **observed cross-jurisdiction association**, not the consequences of hiring an extra worker. Correlation has **no units**: a change from staff to processing time measured in days rather than months would leave it unchanged.
+
+If some values were missing, we would have to choose how to handle them explicitly. For two variables, `use = "complete.obs"` keeps only rows with both values present; it does not solve selection bias.
+
+```{r}
+#| eval: false
+cor(x, y, use = "complete.obs")
+```
+
+### What does `cor.test()` add?
+
+```{r}
+cor.test(
+  jurisdictions$staff_per_100,
+  jurisdictions$processing_months
+)
+```
+
+This adds a test of zero *population* correlation under assumptions and a confidence interval. These inferential quantities have meaning only when the sampling or model assumptions are defensible. In our **constructed** dataset, treat them as demonstrations of the output, not real-world evidence.
+
+::: {.callout-tip title="Correlation is not a regression slope"}
+A correlation of $-0.6$ does **not** mean that one additional staff member reduces processing time by 0.6 months. Correlation is standardized and unit-free. A regression slope expresses a change in the units of the outcome per one unit of the predictor.
+:::
+
+## 3. Ordinary least squares: finding the fitted line
+
+A simple linear regression has the form
+
+$$
+Y_i = \alpha + \beta X_i + \varepsilon_i.
+$$
+
+In our example:
+
+- $Y_i$ is average processing duration **in months** for jurisdiction $i$.
+- $X_i$ is staffing **per 100 pending cases**.
+- $\alpha$ is the fitted intercept: the predicted duration at $X=0$ (not necessarily a realistic jurisdiction).
+- $\beta$ is the slope: the fitted difference in months for one additional staff member per 100 cases.
+- $\varepsilon_i$ represents differences between the outcome and the model's systematic component.
+
+OLS chooses $\hat\alpha$ and $\hat\beta$ to minimize the sum of squared **residuals**:
+
+$$
+\min_{a,b}\sum_{i=1}^{n}(Y_i-a-bX_i)^2.
+$$
+
+With an intercept and one explanatory variable,
+
+$$
+\hat\beta = \frac{\operatorname{Cov}(X,Y)}{\operatorname{Var}(X)},
+\qquad
+\hat\alpha = \bar Y-\hat\beta\bar X.
+$$
+
+### Estimate your first OLS model
+
+```{r}
+m_simple <- lm(
+  processing_months ~ staff_per_100,
+  data = jurisdictions
+)
+
+coef(m_simple)
+```
+
+Read `processing_months ~ staff_per_100` as **model processing months as a function of staffing**. The `~` divides outcome (left) from predictors (right). `lm()` creates a fitted-model **object**; `coef()` extracts its estimated coefficients.
+
+### Verify the slope by hand (using R)
+
+```{r}
+beta_by_formula <- cov(
+  jurisdictions$staff_per_100,
+  jurisdictions$processing_months
+) / var(jurisdictions$staff_per_100)
+
+beta_from_lm <- unname(coef(m_simple)["staff_per_100"])
+
+c(from_formula = beta_by_formula, from_lm = beta_from_lm)
+```
+
+Both methods give the same slope. This is a useful connection between the formula in the statistics handbook and what R calculates.
+
+### The line and the observations
+
+```{r}
+#| label: fig-inference-ols-line
+#| fig-cap: "Fitted OLS line through the fictional cross-jurisdiction data."
+ggplot(jurisdictions, aes(staff_per_100, processing_months)) +
+  geom_point(alpha = 0.5, color = "#2475a6") +
+  geom_smooth(method = "lm", formula = y ~ x, se = FALSE,
+              color = "#b25b32", linewidth = 1) +
+  labs(
+    x = "Staff per 100 pending cases",
+    y = "Processing duration (months)",
+    title = "OLS describes the average linear relationship"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+### Fitted values and residuals
+
+The fitted value for jurisdiction $i$ is $\hat Y_i=\hat\alpha+\hat\beta X_i$. The **residual** is $e_i=Y_i-\hat Y_i$. Residuals describe the part of each observed outcome **not fitted** by this estimated line; they are not directly observed structural errors or evidence of misbehavior.
+
+```{r}
+first_five <- jurisdictions |>
+  mutate(
+    fitted_months = predict(m_simple),
+    residual_months = residuals(m_simple)
+  ) |>
+  select(jurisdiction, staff_per_100, processing_months,
+         fitted_months, residual_months) |>
+  head(5)
+
+first_five
+```
+
+Try checking that `processing_months = fitted_months + residual_months`, allowing for rounding. The sum of OLS residuals is approximately zero for a model with an intercept, a mathematical property of the fitted model—not proof that it is correct.
+
+## 4. How to read the R regression output
+
+```{r}
+summary(m_simple)
+```
+
+A typical `summary(lm())` has three important parts.
+
+### Coefficient table: read it column by column
+
+| Column | What it means | What to ask |
+|---|---|---|
+| `Estimate` | Estimated intercept or slope | In which **units**? Compared with what? |
+| `Std. Error` | Estimated uncertainty of the coefficient under model assumptions | Is the estimate precise? |
+| `t value` | Estimate divided by standard error for a zero-coefficient test | How far is it from zero in SE units? |
+| `Pr(>|t|)` | Two-sided p-value for the null of a zero coefficient | Is this compatible with the null under the test assumptions? |
+
+For the staffing row, an estimated slope of **−0.8** *would* mean that a one-unit higher staffing ratio is associated with **0.8 fewer months** of fitted processing duration. This is an **illustrative interpretation**, not a claim that the model above necessarily estimates −0.8.
+
+The intercept refers to `staff_per_100 = 0`. Because the simulated jurisdictions do not cover that staffing value, the intercept may be mathematically necessary but substantively uninformative.
+
+### Extract the numbers you actually want
+
+```{r}
+coef(summary(m_simple))
+```
+
+Or retrieve one estimated coefficient by its name:
+
+```{r}
+coef(m_simple)["staff_per_100"]
+```
+
+### Standard errors and confidence intervals
+
+A **standard error** describes how much an estimate would fluctuate across repetitions of a specified sampling or data-generating procedure. A 95% confidence interval is constructed by a method that covers the fixed target parameter in approximately 95% of such repetitions **if its assumptions hold**.
+
+```{r}
+confint(m_simple, level = 0.95)
+```
+
+For a large sample, a quick approximation is $\hat\beta\pm1.96\times SE$. For a finite sample, `confint(lm_object)` uses the appropriate $t$ critical value. An interval is **not** a 95% probability statement about a fixed coefficient after observing the data.
+
+```{r}
+staff_row <- coef(summary(m_simple))["staff_per_100", ]
+
+c(
+  estimate = staff_row["Estimate"],
+  standard_error = staff_row["Std. Error"],
+  t_statistic = staff_row["t value"],
+  p_value = staff_row["Pr(>|t|)"]
+)
+```
+
+The test statistic here is the estimated slope divided by its standard error. A small p-value does **not** mean that the probability the null is true is small. A large p-value does **not** prove that the true slope is zero.
+
+::: {.callout-important title="Significance is not substantive importance"}
+An association can be estimated precisely and still be too small to matter for refugee protection or administrative performance. Conversely, an important relationship may be imprecisely estimated. Discuss the **estimated magnitude, its uncertainty, and its substantive meaning**—not just significance stars.
+:::
+
+### $R^2$: how much variation is fitted?
+
+For OLS with an intercept,
+
+$$
+R^2 = 1-\frac{\sum_i e_i^2}{\sum_i(Y_i-\bar Y)^2}.
+$$
+
+It describes the fraction of **in-sample outcome variation** accounted for by the fitted model relative to a mean-only baseline. It is **not** the probability that the model is true, the fraction causally explained, or an indicator of fairness.
+
+```{r}
+summary(m_simple)$r.squared
+summary(m_simple)$adj.r.squared
+```
+
+Adjusted $R^2$ penalizes added predictors, unlike ordinary in-sample $R^2$. Neither makes a poorly measured variable or an invalid causal comparison sound.
+
+### Put fitted values and uncertainty into a readable table
+
+`broom` converts model information into ordinary data frames that work with `dplyr` and `ggplot2`.
+
+```{r}
+knitr::kable(
+  broom::tidy(m_simple, conf.int = TRUE),
+  digits = 3,
+  caption = "Coefficients and 95% confidence intervals: fictional example"
+)
+```
+
+- `tidy()` provides one row per coefficient.
+- `glance()` provides model-level statistics such as $R^2$ and sample size.
+- `augment()` provides row-level fitted values and residuals.
+
+```{r}
+broom::glance(m_simple) |>
+  select(r.squared, adj.r.squared, sigma, nobs)
+
+broom::augment(m_simple) |>
+  select(processing_months, staff_per_100, .fitted, .resid) |>
+  head(5)
+```
+
+## 5. Multiple regression: comparing like with like (conditionally)
+
+A simple regression relates staffing to processing times. But richer and less-richly resourced jurisdictions may differ in staffing, case complexity, and many other features. Multiple regression allows us to **describe the partial association holding included variables fixed**:
+
+$$
+Y_i=\alpha+\beta_1\,\text{Staff}_i
+   +\beta_2\,\text{Complexity}_i
+   +\beta_3\,\text{Resources}_i+\varepsilon_i.
+$$
+
+```{r}
+m_adjusted <- lm(
+  processing_months ~ staff_per_100 + complexity + resources,
+  data = jurisdictions
+)
+
+summary(m_adjusted)
+```
+
+The `staff_per_100` coefficient in this model is the difference in fitted processing time associated with a one-unit staffing difference **at the same values of the included complexity and resource indices**. It is not necessarily the effect of changing staffing while leaving everything else unchanged in the real world.
+
+### Compare specifications directly
+
+```{r}
+comparison <- tibble(
+  model = c("Simple", "Adjusted"),
+  staff_coefficient = c(
+    unname(coef(m_simple)["staff_per_100"]),
+    unname(coef(m_adjusted)["staff_per_100"])
+  ),
+  r_squared = c(
+    summary(m_simple)$r.squared,
+    summary(m_adjusted)$r.squared
+  )
+)
+
+knitr::kable(comparison, digits = 3)
+```
+
+Why might the coefficient change? Some of the original correlation between staffing and processing time may reflect **differences in other characteristics**. If an omitted variable affects both staffing and outcomes, the simple slope can be distorted. But adding controls is not a universal cure: poorly chosen controls can also introduce bias.
+
+### Categorical predictors are different from continuous ones
+
+Suppose jurisdictions belong to one of three entirely fictional administrative regions. We can add a group label and see how R creates an indicator for each non-reference category.
+
+```{r}
+jurisdictions <- jurisdictions |>
+  mutate(region = factor(rep(c("North", "South", "West"),
+                             length.out = n())))
+
+m_region <- lm(
+  processing_months ~ staff_per_100 + complexity + region,
+  data = jurisdictions
+)
+
+coef(m_region)
+```
+
+Because `region` is a factor, R omits one category as the **reference group**; the remaining coefficients compare categories with that reference, conditional on the other predictors. Changing the reference group changes the displayed group coefficients but not the fitted values.
+
+::: {.callout-note title="What does 'holding constant' mean?"}
+It describes a **comparison inside the fitted model** between observations with the same values of other included variables. It does not guarantee that two real jurisdictions are comparable on all relevant characteristics, and it does not by itself establish causality.
+:::
+
+## 6. Logged variables: coefficients depend on the scale
+
+Migration and asylum research often uses highly unequal quantities, such as caseloads, processing time, or funding. Researchers sometimes model the **logarithm** of a positive variable. This is distinct from logistic regression, which we introduce in the next section.
+
+In R, `log(x)` is the **natural logarithm**. It requires positive `x`; `log(0)` is negative infinity. Adding 1 before logging is sometimes used for zeros but **changes the model and its interpretation**.
+
+### Four common specifications
+
+| Model | Form | How to interpret a slope $\beta$ |
+|---|---|---|
+| Level–level | $Y=\alpha+\beta X+\varepsilon$ | One-unit higher $X$ ↔ $\beta$ units higher fitted $Y$ |
+| Log–level | $\log(Y)=\alpha+\beta X+\varepsilon$ | One-unit higher $X$ ↔ approximately $100\beta\%$ higher fitted $Y$; exact $100(e^\beta-1)\%$ |
+| Level–log | $Y=\alpha+\beta\log(X)+\varepsilon$ | 1% higher $X$ ↔ approximately $\beta/100$ units higher fitted $Y$ |
+| Log–log | $\log(Y)=\alpha+\beta\log(X)+\varepsilon$ | 1% higher $X$ ↔ approximately $\beta\%$ higher fitted $Y$; an elasticity |
+
+These are **comparisons in the fitted conditional mean or log-mean**, not automatically individual causal effects. In a log-outcome regression, transforming the predicted log outcome back with `exp()` does not generally recover the arithmetic conditional mean of $Y$ without additional assumptions or adjustments.
+
+### See the difference in R
+
+The fictional processing durations and staffing ratios are positive, so we can compare specifications:
+
+```{r}
+m_log_outcome <- lm(
+  log(processing_months) ~ staff_per_100 + complexity + resources,
+  data = jurisdictions
+)
+
+m_log_log <- lm(
+  log(processing_months) ~ log(staff_per_100) + complexity + resources,
+  data = jurisdictions
+)
+
+coef(m_log_outcome)["staff_per_100"]
+coef(m_log_log)["log(staff_per_100)"]
+```
+
+For the first model, calculate the **exact percentage difference** associated with one additional staff member per 100 cases:
+
+```{r}
+beta_log_y <- unname(coef(m_log_outcome)["staff_per_100"])
+100 * (exp(beta_log_y) - 1)
+```
+
+Do not confuse this percentage difference in a fitted geometric-mean scale with a change in **percentage points** of a recognition rate.
+
+## 7. Logistic regression: binary outcomes, probabilities, and odds
+
+Suppose the outcome is no longer a processing duration. Instead it is a **binary indicator**: `1` if a fictional application was recognized and `0` if it was rejected. This is a **different dataset**, with one observation per fictional application. Real protection procedures often have more than two possible outcomes; the simplified binary coding is used only for teaching.
+
+### Why not use an ordinary straight line?
+
+A binary outcome can take only 0 or 1. A linear probability model can be useful in some research designs, but its fitted values are not necessarily between 0 and 1. Logistic regression models the **log-odds** of an outcome and ensures predicted probabilities fall between 0 and 1.
+
+If $p_i=\Pr(Y_i=1\mid X_i)$, the **odds** are
+
+$$
+\operatorname{odds}_i=\frac{p_i}{1-p_i}.
+$$
+
+The **log-odds**, or *logit*, are
+
+$$
+\log\left(\frac{p_i}{1-p_i}\right)
+  =\alpha+\beta X_i.
+$$
+
+Equivalently, the probability is
+
+$$
+p_i=\frac{e^{\alpha+\beta X_i}}{1+e^{\alpha+\beta X_i}}.
+$$
+
+### Probability is not the same as odds
+
+| Probability | Odds | Plain-language reading |
+|---|---|---|
+| 0.20 | $0.20/0.80=0.25$ | One to four |
+| 0.50 | $0.50/0.50=1$ | One to one |
+| 0.80 | $0.80/0.20=4$ | Four to one |
+
+A coefficient of $0.69$ in a logistic regression is **not** an increase of 69 percentage points. It is about $0.69$ in **log-odds** units. Exponentiating gives the **odds ratio**: $e^{0.69}\approx 2$. That means roughly twice the odds for a one-unit difference, not twice the probability.
+
+For example, if the initial probability is 20%, the odds are $0.2/0.8=0.25$. **Doubling those odds** gives odds of $0.5$, corresponding to a probability of $0.5/(1+0.5)=33.3\%$—**not 40%**. The increase is about **13.3 percentage points**, not 20 percentage points.
+
+```{r}
+p_initial <- 0.20
+odds_initial <- p_initial / (1 - p_initial)
+odds_after <- 2 * odds_initial
+p_after <- odds_after / (1 + odds_after)
+
+c(initial_probability = p_initial,
+  after_doubled_odds = p_after,
+  change_in_percentage_points = 100 * (p_after - p_initial))
+```
+
+### Construct an entirely fictional application-level dataset
+
+```{r}
+#| label: logistic-data
+set.seed(2027)
+n_applications <- 650
+
+claims <- tibble(
+  claim_id = seq_len(n_applications),
+  evidence_index = rnorm(n_applications),
+  represented = rbinom(n_applications, size = 1, prob = 0.45),
+  origin_group = factor(
+    sample(c("A", "B", "C"), n_applications,
+           replace = TRUE, prob = c(0.4, 0.35, 0.25))
+  )
+) |>
+  mutate(
+    probability = plogis(
+      -0.8 + 0.75 * evidence_index + 0.55 * represented +
+        if_else(origin_group == "B", -0.4, 0) +
+        if_else(origin_group == "C", 0.35, 0)
+    ),
+    recognized = rbinom(n(), size = 1, prob = probability)
+  )
+
+claims |>
+  select(claim_id, evidence_index, represented,
+         origin_group, recognized) |>
+  head(8)
+```
+
+The variables are imaginary. In actual administrative records, legal representation, case evidence, and outcomes are entangled with selection processes and other characteristics; their associations should not be read as causal effects.
+
+### Estimate a logistic model using `glm()`
+
+```{r}
+logit_model <- glm(
+  recognized ~ evidence_index + represented + origin_group,
+  family = binomial(link = "logit"),
+  data = claims
+)
+
+summary(logit_model)
+```
+
+The `glm()` function fits a **generalized linear model**. `family = binomial(link = "logit")` tells R to model a binary outcome through its log-odds. The coefficients displayed by `summary()` are on the **log-odds scale**, not the probability scale.
+
+### Report odds ratios and their intervals
+
+```{r}
+logit_or <- broom::tidy(
+  logit_model,
+  conf.int = TRUE,
+  exponentiate = TRUE
+)
+
+knitr::kable(logit_or, digits = 3,
+             caption = "Fictional example: logistic odds ratios and 95% intervals")
+```
+
+Because `exponentiate = TRUE`, the estimates and confidence limits are expressed as **odds ratios**. An odds ratio of 1 indicates equal odds; above 1 means higher odds; below 1 means lower odds, conditional on the included variables. The table's `statistic` and `p.value` fields still describe tests of the original log-odds coefficients against zero.
+
+You can obtain the ratio yourself:
+
+```{r}
+beta_rep <- unname(coef(logit_model)["represented"])
+exp(beta_rep)
+```
+
+### Turn odds into predicted probabilities
+
+A more intuitive way to report a logistic model is to calculate predicted **probabilities** for specified covariate profiles.
+
+```{r}
+profiles <- tibble(
+  evidence_index = c(0, 0),
+  represented = c(0, 1),
+  origin_group = factor(c("A", "A"),
+                        levels = levels(claims$origin_group))
+)
+
+profiles$predicted_probability <- predict(
+  logit_model,
+  newdata = profiles,
+  type = "response"
+)
+
+profiles |>
+  mutate(predicted_percent = 100 * predicted_probability)
+```
+
+Both fictional profiles have the same origin group and evidence index; only `represented` changes. Subtract the predicted probabilities to obtain a difference in **percentage points**:
+
+```{r}
+100 * diff(profiles$predicted_probability)
+```
+
+This conditional predicted difference is **not** the same as the odds ratio, and is **not** a causal effect of representation. Unlike a constant log-odds coefficient, a probability difference generally depends on the starting probability and covariates.
+
+```{r}
+#| label: fig-logistic-probabilities
+#| fig-cap: "Predicted probabilities from a fictional logistic regression; origin group A, no representation."
+probability_curve <- tibble(
+  evidence_index = seq(-2.5, 2.5, length.out = 100),
+  represented = 0,
+  origin_group = factor("A", levels = levels(claims$origin_group))
+)
+
+probability_curve$predicted <- predict(
+  logit_model,
+  newdata = probability_curve,
+  type = "response"
+)
+
+ggplot(probability_curve, aes(evidence_index, predicted)) +
+  geom_line(color = "#2475a6", linewidth = 1.1) +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(
+    x = "Fictional evidence index",
+    y = "Predicted recognition probability",
+    title = "Logistic regression maps a linear predictor to a probability"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+::: {.callout-important title="Four different quantities: check the scale"}
+**Coefficient:** change in log-odds. **Odds ratio:** $e^\beta$, multiplicative change in odds. **Probability:** predicted chance of the outcome (0 to 1). **Percentage points:** arithmetic difference between two probabilities multiplied by 100. These are **not** synonyms, and none automatically represents a causal effect.
+:::
+
+## 8. Reading and exporting regression tables
+
+Research papers rarely display the raw output of `summary(lm())`. Instead they compare models in **regression tables**: columns are different specifications; rows are coefficients; parentheses often contain standard errors (or confidence intervals if clearly labeled).
+
+### What an academic regression table contains
+
+| Element | How to read it |
+|---|---|
+| Dependent variable | The outcome being modeled: **months**, **log-months**, or **log-odds**? |
+| Columns (1), (2), ... | Alternative model specifications; inspect which covariates change |
+| Coefficient | Fitted difference associated with a predictor, in the model's units |
+| Parentheses | Often standard errors, but check the table note: sometimes confidence intervals |
+| Significance stars | Conventional shorthand for p-value thresholds—not effect size or importance |
+| Observations ($N$) | Number of rows used; may differ across models due to missingness |
+| $R^2$ / adjusted $R^2$ | Fit summaries appropriate to OLS; not causal quality measures |
+| Table note | Units, controls, standard-error method, source, exclusions, and sample |
+
+### `stargazer`: the classic R regression-table package
+
+The older `stargazer` package is still common in replication code and produces text, HTML, or LaTeX regression tables. Install it as shown at the beginning of this section.
+
+The following chunk prints a proper HTML table in the Quarto website:
+
+```{r}
+#| label: tbl-stargazer-ols
+#| results: asis
+#| echo: true
+stargazer::stargazer(
+  m_simple, m_adjusted,
+  type = "html",
+  title = "Fictional jurisdiction-level OLS models",
+  column.labels = c("Unadjusted", "Adjusted"),
+  dep.var.labels = "Processing duration (months)",
+  covariate.labels = c("Staff per 100 pending cases",
+                       "Case complexity", "Resources", "Constant"),
+  digits = 3,
+  notes = "Fictional observations. Conventional OLS standard errors in parentheses. Associations, not causal effects.",
+  notes.append = FALSE
+)
+```
+
+The default `stargazer()` format is LaTeX; specifying `type = "html"` and Quarto's `#| results: asis` is useful for a website. For a simple text table in the R Console, use `type = "text"` instead.
+
+To save a table that you can open in a browser or attach separately, use `out`:
+
+```{r}
+#| eval: false
+#| message: false
+dir.create("outputs", showWarnings = FALSE)
+
+stargazer::stargazer(
+  m_simple, m_adjusted,
+  type = "html",
+  out = "outputs/ols-models.html"
+)
+```
+
+### `broom`: get estimates into an ordinary data frame
+
+This approach is especially useful if you want to manipulate or plot coefficients yourself.
+
+```{r}
+coefficient_table <- bind_rows(
+  broom::tidy(m_simple, conf.int = TRUE) |>
+    mutate(model = "Simple"),
+  broom::tidy(m_adjusted, conf.int = TRUE) |>
+    mutate(model = "Adjusted")
+)
+
+knitr::kable(
+  coefficient_table |>
+    select(model, term, estimate, std.error, conf.low, conf.high),
+  digits = 3,
+  caption = "Two OLS models, extracted with broom"
+)
+```
+
+Because the results are data frames, we can visualize the coefficient and its uncertainty:
+
+```{r}
+#| label: fig-staff-coefficient-intervals
+#| fig-cap: "Staffing coefficients with 95% model-based confidence intervals in two fictional OLS specifications."
+coefficient_table |>
+  filter(term == "staff_per_100") |>
+  ggplot(aes(x = model, y = estimate,
+             ymin = conf.low, ymax = conf.high)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  geom_pointrange(color = "#2475a6") +
+  coord_flip() +
+  labs(x = NULL,
+       y = "Estimated association (months per additional staff / 100 cases)") +
+  theme_minimal(base_size = 12)
+```
+
+### `modelsummary`: a modern table workflow
+
+`modelsummary` supports multiple types of statistical models and can create attractive, customizable tables in Quarto, HTML, Word, PDF, and other formats.
+
+```{r}
+#| label: tbl-modern-models
+modelsummary::modelsummary(
+  list("Simple" = m_simple, "Adjusted" = m_adjusted),
+  title = "Fictional processing-duration regressions",
+  estimate = "{estimate}{stars}",
+  statistic = "({std.error})",
+  stars = c("*" = 0.05, "**" = 0.01, "***" = 0.001),
+  fmt = 3,
+  output = "tinytable"
+)
+```
+
+You can export tables into a separate file from an R script. For example:
+
+```{r}
+#| eval: false
+modelsummary::modelsummary(
+  list("Simple" = m_simple, "Adjusted" = m_adjusted),
+  output = "outputs/ols-models.docx"
+)
+```
+
+::: {.callout-tip title="A reporting habit worth keeping"}
+Never paste only coefficients and stars into a report. State **what the outcome is, how the variables are measured, which observations are included, what the parentheses contain, and whether the model is descriptive or supports a causal interpretation**. For logistic models, state explicitly whether the table displays log-odds coefficients or exponentiated odds ratios.
+:::
+
+## 9. Model checks: does the regression description make sense?
+
+A model can be estimated successfully and still be a poor description of the observed relationship. Common concerns include nonlinearity, heteroskedasticity (unequal error variance), influential observations, and confounding. The technical issues are different from the substantive question of causal identification.
+
+### Residual plot
+
+```{r}
+#| label: fig-inference-residuals
+#| fig-cap: "Residuals versus fitted values for the adjusted fictional OLS model."
+augmented <- broom::augment(m_adjusted)
+
+ggplot(augmented, aes(x = .fitted, y = .resid)) +
+  geom_hline(yintercept = 0, color = "grey50", linetype = "dashed") +
+  geom_point(alpha = 0.6, color = "#2475a6") +
+  geom_smooth(se = FALSE, color = "#b25b32") +
+  labs(x = "Fitted processing duration (months)",
+       y = "Residual (observed − fitted)",
+       title = "Look for patterns, not just a p-value") +
+  theme_minimal(base_size = 12)
+```
+
+A systematic curve might suggest a missing nonlinear relationship. A widening spread can suggest heteroskedasticity. Points unusually far from the bulk of the data are worth checking, but **an outlier is not automatically a data error**.
+
+### Conventional versus heteroskedasticity-robust standard errors
+
+Ordinary OLS coefficients do not change when we calculate **heteroskedasticity-consistent standard errors**. Their estimated uncertainty can change.
+
+```{r}
+#| message: false
+lmtest::coeftest(
+  m_adjusted,
+  vcov. = sandwich::vcovHC(m_adjusted, type = "HC3")
+)
+```
+
+This is an introductory example, not a recommendation to use the same standard-error method in every research design. With clustered, longitudinal, or otherwise dependent observations, **the relevant uncertainty structure may require different methods**, and robust standard errors do not solve bias or poor measurement.
+
+### Prediction is different from explanation
+
+```{r}
+new_case <- data.frame(
+  staff_per_100 = 7,
+  complexity = 0.5,
+  resources = 0
+)
+
+predict(m_adjusted, newdata = new_case, interval = "confidence")
+predict(m_adjusted, newdata = new_case, interval = "prediction")
+```
+
+A **confidence interval for a conditional mean** describes uncertainty about the average fitted outcome for a profile. A **prediction interval** allows additionally for the dispersion of a new individual jurisdiction outcome, so it is usually wider. These depend on the fitted model and its assumptions.
+
+## 10. How (not) to apply this to real UNHCR data
+
+For practice, you may want to plot 2022 refugee *stocks* against 2022 asylum-seeker *stocks* by destination using the `refugees` package. These are two different categories measured at the end of the year, **not counts of applications or decisions**, and their observed association would require careful assessment of reporting coverage and special entities.
+
+```{r}
+#| eval: false
+library(refugees)
+
+host_stocks_2022 <- refugees::population |>
+  filter(year == 2022, !is.na(coa_iso)) |>
+  group_by(coa_iso, coa_name) |>
+  summarise(
+    refugees_stock = sum(refugees, na.rm = TRUE),
+    asylum_seeker_stock = sum(asylum_seekers, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Descriptive exploration only; assess reporting first.
+ggplot(host_stocks_2022,
+       aes(x = refugees_stock, y = asylum_seeker_stock)) +
+  geom_point(alpha = 0.5) +
+  scale_x_continuous(trans = "log1p") +
+  scale_y_continuous(trans = "log1p")
+```
+
+The exercise deliberately stops at a plot. A regression of one stock on another would not identify how many asylum applicants will receive protection. Population denominators, reporting categories, applications, decisions, and individual-level outcomes are conceptually different.
+
+Before proposing **any** inferential analysis of the UNHCR tables, write a short research-design note covering the population and unit of analysis, definitions of the variables, observation period, missingness, assumptions, and whether the proposed interpretation is descriptive, predictive, or causal.
+
+## 11. Exercises: calculate, interpret, present, critique
+
+### Part A — Correlation and OLS
+
+1. In words, describe the scatterplot of the fictional jurisdictions. Compute the Pearson correlation and state its sign, approximate strength, and what it cannot tell you.
+2. Fit `lm(processing_months ~ staff_per_100, data = jurisdictions)`. Identify the intercept and the slope. Write a sentence interpreting the slope **with its units**.
+3. Reconstruct the OLS slope using `cov(X, Y) / var(X)`. Confirm that it agrees with `coef()`.
+4. Extract fitted values and residuals. For three jurisdictions, verify that *observed = fitted + residual*.
+5. Find the slope's standard error, t statistic, p-value, and 95% confidence interval. Explain in ordinary language what each means and what it **does not** mean.
+
+### Part B — Multiple regression and interpretation
+
+6. Compare the staffing coefficients in the simple and adjusted models. Why might they differ? Can you describe the adjusted coefficient as a causal effect?
+7. Find $R^2$ and adjusted $R^2$ in both OLS models. Explain why a larger $R^2$ does not establish a better causal research design.
+8. Fit the model with `region`. Which region serves as the reference, and how should the other region coefficients be interpreted?
+9. Fit the log-outcome specification. Convert the staffing coefficient to an exact percentage difference with `100 * (exp(beta) - 1)`.
+
+### Part C — Logistic regression and regression tables
+
+10. Estimate a logistic regression for `recognized` using `represented`, `evidence_index`, and `origin_group`. Interpret the `represented` coefficient on the **log-odds** scale and as an **odds ratio**.
+11. Predict recognition probabilities for two profiles differing only in representation. Report the difference in **percentage points**. Is this the same as the odds ratio?
+12. Use `stargazer()` to display your two OLS models side by side in HTML, and use `broom::tidy()` to construct a table of coefficients and confidence intervals.
+13. Recreate the table with `modelsummary()`. Explain the dependent variable, the sample size, the parentheses, and the model specifications. What additional information would a journal reader need?
+
+### Part D — Critical research design
+
+14. Find one high-residual jurisdiction in the fictional dataset. Does being unusual prove that the record is erroneous?
+15. Imagine a cross-country UNHCR regression that predicts recognition outcomes using the number of applications. List at least **four** threats to its substantive interpretation (think about units, timing, sample selection, omitted variables, and definitions).
+16. Write a three-sentence research finding: one sentence on the estimated relationship, one on its uncertainty, and one on the limits of its interpretation. Do **not** use the words *impact* or *effect* unless justified by a causal design.
+
+::: {.callout-important title="Do not let the code outrun the research design"}
+R can produce a coefficient, a p-value, an odds ratio, and a publication-style table in a few lines. Those outputs are only as meaningful as the **measurement, comparison, uncertainty assumptions, and research design** behind them. Learning to interpret the table critically is part of learning statistics.
+:::
+
+::: {.callout-note title="Further reading and software documentation"}
+
+- [R for Data Science: Exploratory Data Analysis](https://r4ds.hadley.nz/EDA.html)
+- [broom: tidying statistical models](https://broom.tidymodels.org/)
+- [stargazer package documentation](https://search.r-project.org/CRAN/refmans/stargazer/html/stargazer.html)
+- [modelsummary documentation](https://modelsummary.com/)
+- Your companion guideb, *Evidence, Probability and Regression*, for the conceptual discussion of inference, OLS, uncertainty, and reading regression tables.
+
+:::

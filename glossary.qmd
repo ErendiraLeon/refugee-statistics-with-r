@@ -1,0 +1,90 @@
+---
+title: "Statistics and R glossary"
+subtitle: "Plain-language definitions to consult whenever a term is unfamiliar"
+number-sections: false
+---
+
+You do not need to memorize these definitions before working through the exercises. Use this page as a reference; whenever a term appears in R code, ask **what quantity is being measured and what one observation represents**.
+
+| Term | What it means in these exercises |
+|---|---|
+| **Absolute change** | Current value minus earlier value, in the original units (for example, people). |
+| **Aesthetic mapping (`aes()`)** | Connecting data variables to visual properties such as x-position, y-position, or color in `ggplot2`. |
+| **Application** | A protection claim lodged within a period and a specified procedural scope; reported as cases or persons depending on the source. |
+| **Argument** | Input passed to a function, such as `na.rm = TRUE` in `mean(x, na.rm = TRUE)`. |
+| **Assignment (`<-`)** | Stores a value, vector, table or other object under a name in R. |
+| **Base year** | Reference year used to set an index equal to 100 (2015 in the time-trends example). |
+| **Binary variable** | Variable with two values, such as `recognized = 1` or `0`. |
+| **Case / person** | Different reporting units: one case may include multiple people. Check `app_pc` and `dec_pc`. |
+| **Categorical variable** | A label or group such as destination country or decision type. |
+| **Coefficient** | Estimated model parameter expressing an association on the model's stated scale, conditional on included covariates. |
+| **Composite key** | Two or more columns needed together to identify a record, such as destination **and** year. |
+| **Confidence interval (CI)** | Interval calculated using a procedure that has a stated long-run coverage rate under its assumptions. It does not assign a 95% probability to a fixed coefficient. |
+| **Confounder** | A factor related to both a predictor/treatment and an outcome that can distort their observed association. |
+| **Correlation** | A unit-free measure of association; Pearson's `r` measures the direction and strength of a **linear** relationship between two numerical variables. |
+| **Country of asylum (`coa_*`)** | Destination or country where people are reported residing or where an asylum procedure takes place. |
+| **Country of origin (`coo_*`)** | Origin attributed to a displaced person in the data. |
+| **Cross-section** | Observations for several units at a particular time. |
+| **Data frame / tibble** | Rectangular R table: columns are variables and rows are observations. |
+| **Decision** | Recorded outcome of an asylum procedure during a period; it may concern an application from an earlier year. |
+| **Denominator** | Quantity beneath a fraction; establishes what a rate or percentage is relative to. |
+| **Dependency** | Another R package that a package needs to work. |
+| **Descriptive statistic** | Numerical summary of observed data, such as a median, total, percentage, or standard deviation. |
+| **Distribution** | How the observed values of a variable are spread across units or categories. |
+| **End-of-year stock** | Count observed at the end of a reference year, not the number of arrivals during that year. |
+| **Faceting** | Dividing one graphic into multiple small panels for groups or time periods. |
+| **Factor** | R's representation of a categorical variable with defined levels; used in plots and regression. |
+| **Fitted value** | Value predicted for an observation by an estimated statistical model. |
+| **Flow** | Events or movements occurring **during** a period, unlike a stock measured at a point in time. |
+| **Function** | Reusable named R operation, such as `mean()`, `filter()`, or `lm()`. |
+| **Heteroskedasticity** | Unequal variance of regression errors across observations or fitted values; conventional OLS standard errors can be misleading under it. |
+| **Histogram** | Graph of the frequency of numeric observations within value intervals called **bins**. |
+| **Index** | Series normalized to a base value of 100, allowing comparison of relative changes from a common starting year. |
+| **Inference** | Drawing conclusions about a larger population, process, or model parameter using data and assumptions about uncertainty. |
+| **Interquartile range (IQR)** | Third quartile minus first quartile, summarizing the middle half of a distribution. |
+| **Join** | Combining tables by matching values of specified **keys**, such as country code and year. |
+| **Key** | Variable or combination of variables used to identify observations when checking uniqueness or matching tables. |
+| **Lag (`lag()`)** | Previous value in a sequence; for annual change, sort within each country and check years are consecutive. |
+| **Left join** | Join that retains all left-table rows and adds matching right-table information; missing matches yield `NA`. |
+| **Log-odds** | Natural logarithm of `p / (1 - p)`, where `p` is a probability strictly between 0 and 1. |
+| **Log scale** | Axis or variable measured on a logarithmic rather than linear scale; zero requires special handling. |
+| **Logarithm (`log()`)** | Natural logarithm; transforms positive quantities and changes coefficient interpretation in a regression. |
+| **Logistic regression** | Regression model for a binary outcome, usually modeling the log-odds as a linear function of predictors (`glm(..., family = binomial)`). |
+| **Long format** | Layout with one column for each variable and, for example, one row per destination–year. |
+| **Mean** | Sum of observed numerical values divided by their number. Sensitive to extreme observations. |
+| **Median** | Middle value of the ordered observations, or average of the two central values; less sensitive to extremes. |
+| **Missing value (`NA`)** | Information absent in the R object. Missing is **not** equivalent to a recorded zero. |
+| **Missingness** | Pattern of absent data; its causes and concentration can affect comparisons and interpretation. |
+| **Model specification** | The chosen outcome, predictors, transformations and other assumptions defining the fitted model. |
+| **Numerator** | Quantity on top of a fraction, such as the number of positive outcomes in a protection rate. |
+| **Object** | Data or a result stored in R and referenced using a name; can be a number, vector, table, or fitted model. |
+| **Observation** | Row of an analytical table; interpretation depends on the unit of analysis. |
+| **Odds** | For a probability `p`, the ratio `p / (1 - p)`; not the same as the probability itself. |
+| **Odds ratio (OR)** | Ratio of two sets of odds, often computed as `exp(beta)` from a logistic coefficient. An OR of 2 does not mean the probability doubles. |
+| **OLS** | Ordinary least squares: method selecting regression coefficients to minimize the sum of squared residuals. |
+| **Outlier** | Unusually distant observed value; not necessarily incorrect. |
+| **p-value** | Probability, assuming a specified null hypothesis and test model, of a test statistic at least as extreme as observed; **not** the probability the null is true. |
+| **Package** | Collection of reusable R functions, documentation and sometimes datasets; commonly distributed via CRAN. |
+| **Percentage change** | `100 * (current / previous - 1)`, defined for a nonzero previous value. |
+| **Percentage point** | Difference between percentages; from 45% to 60% is **15 percentage points**. |
+| **Pipe operators** | Passes the result of one operation to the next. Native R uses `\|>`; `magrittr` uses `%>%` (often available through `dplyr`). |
+| **Pivot / reshape** | Reorganizing a table with `tidyr::pivot_longer()` or `pivot_wider()`; this does not itself aggregate values. |
+| **Predicted probability** | Model-based probability for a specified covariate profile, often from `predict(..., type = "response")` in a logistic model. |
+| **Protection rate** | Share of a specified set of substantive asylum outcomes granting refugee or other protection; definitions, units and stage must be explicit. |
+| **Quartiles** | Cut points at 25%, 50% and 75% of the ordered distribution. |
+| **R-squared (`R²`)** | Fraction of sample outcome variation explained by fitted values in conventional OLS with an intercept; not a measure of causality. |
+| **Regression** | Model that describes how an outcome varies with one or more explanatory variables under a chosen specification. |
+| **Regression table** | Display of model coefficients with measures of uncertainty, observations, specification and fit; may be produced with `stargazer` or `modelsummary`. |
+| **Residual** | Observed outcome minus its fitted value in an estimated model. |
+| **Right-skewed distribution** | Distribution with a relatively long right tail; often (but not always) a mean above its median. |
+| **Robust standard error** | Standard error computed under an alternative variance estimator, such as one allowing heteroskedasticity; does not correct confounding. |
+| **Script** | Saved text file of R commands (`.R`) that can be executed again. |
+| **Standard deviation** | Measure of dispersion around the mean; R's `sd()` uses the `n - 1` sample convention. |
+| **Standard error (SE)** | Estimated uncertainty of a statistic or estimator across hypothetical repeated samples under a model/design. |
+| **Statistical significance** | Result of a specified hypothesis test relative to a chosen threshold; not the same as substantive importance. |
+| **Stock** | Population count measured at a given time rather than events throughout a period. |
+| **Time series** | Repeated measurements of a comparable quantity across ordered dates. |
+| **Unit of analysis** | What each row substantively represents: an application, jurisdiction, destination, country-year, origin–destination–year, etc. |
+| **Variable** | Recorded characteristic, usually a table column, such as `year` or `refugees`. |
+| **Vector** | One-dimensional R collection of values, for example `c(2, 4, 8)`. |
+| **Wide format** | Layout with repeated measurements in separate columns, for example one column per year. |

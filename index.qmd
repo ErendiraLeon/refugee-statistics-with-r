@@ -1,0 +1,78 @@
+---
+title: "Welcome"
+subtitle: "Start from zero. Learn by doing using refugee data."
+number-sections: false
+---
+
+<div class="author-card">
+<strong>Eréndira León-Salvador</strong><br>
+Postdoctoral Research Fellow (ERC RefLex: <em>Is International Refugee Law Effective?</em>)<br>
+UCD College of Social Sciences &amp; Law<br>
+✉ <a href="mailto:erendira.leonsalvador@ucd.ie">erendira.leonsalvador@ucd.ie</a>
+</div>
+
+## Why this site exists
+
+A dataset of refugee populations or asylum decisions can answer important descriptive questions. But it can also lead us astray if we divide the wrong numbers, confuse countries of origin with countries of asylum, or read a correlation as proof of causation. The purpose of these series of exercises is to build two skills **together**: using R and thinking carefully about evidence.
+
+You do **not** need to know how to program, or to have studied statistics before. We begin by installing R and learning what a command does. We gradually progress to comparing countries, computing summary statistics, producing interpretable figures, examining asylum decisions, and understanding the limits of a statistical analysis.
+
+This is a resource developed in the context of the ERC RefLex research environment, not an official UNHCR publication. The examples use the [`refugees` R package](https://populationstatistics.github.io/refugees/), which provides access to statistics derived from the UNHCR Refugee Data Finder and other displacement data sources.
+
+## What you will be able to do
+
+After working through the book you should be able to:
+
+1. Install R, RStudio, and packages; save scripts and work in a project.
+2. Explain what a row, variable, missing value, and unit of analysis mean.
+3. Filter and summarize refugee data using simple, readable R commands.
+4. Interpret means, medians, percentages, distributions, and time trends.
+5. Reproduce graphs **from their underlying code** and explain what each graph communicates.
+6. Distinguish end-of-year population **stocks**, annual asylum **applications**, and asylum **decisions**.
+7. Calculate and critically evaluate a recognition or protection-rate indicator.
+8. Recognize why a comparison or association need not be causal.
+
+## How a section works
+
+Every section contains the same sequence: a question, a short conceptual explanation, an R command, the output it generates when this book is rendered, and questions to try independently. Some chapters also include a small *toy dataset* so you can experiment without worrying about an unfamiliar database.
+
+::: {.callout-tip title="Three habits worth developing"}
+- **Predict** what the code will do before running it.
+- **Describe** the output in a complete sentence, including its units and denominator.
+- **Question** whether the calculation measures what you think it measures.
+:::
+
+## A first glimpse: code and a figure
+
+The next plot uses **ten published values from a 2022 example in the `refugees` package documentation**. It is not a new UNHCR global total, nor a time series. Here, `refugees_plus_oip` is the documented sum of reported refugees and *other people in need of international protection* by origin. The code below produces the plot when you render the book with R installed.
+
+```{r}
+#| label: fig-welcome-origins
+#| fig-cap: "Ten origin countries in the package's worked 2022 example. Categories combine 'refugees' and 'other people in need of international protection'. Source: refugees package documentation."
+#| out-width: "95%"
+library(ggplot2)
+library(readr)
+
+example_2022 <- read_csv("data/unhcr_origin_top10_2022.csv", show_col_types = FALSE)
+
+ggplot(example_2022,
+       aes(x = refugees_plus_oip / 1e6,
+           y = reorder(origin, refugees_plus_oip))) +
+  geom_col(fill = "#2475a6", width = 0.7) +
+  labs(x = "People (millions)", y = NULL,
+       title = "Reading a chart starts with reading its definition") +
+  theme_minimal(base_size = 12)
+```
+
+**Try reading it:** Which origin country appears first? What does the horizontal axis measure? Would these bars tell us which countries grant the most asylum applications? (No: they represent a different measure.)
+
+
+## Choose your starting point
+
+If this is your first encounter with R, start with [Section 1: Installation](00-install.qmd). If you have already used R a little, begin with [First steps](01-first-steps.qmd) or [Meet the data](02-meet-the-data.qmd).
+
+You can download the [student practice script](exercises/student-practice.R) and fill it in as you go. The [solutions](solutions.qmd) are available for checking *after* you attempt the tasks.
+
+::: {.callout-note title="About the data and reproducibility"}
+The `refugees` package is periodically updated. Values calculated from the live package may therefore change as revised data or additional years become available. Most worked questions use **2022** deliberately, and the small 2022 example CSV is fixed. Always record the package version and data date in research work. The site will explain how.
+:::

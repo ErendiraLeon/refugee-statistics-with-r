@@ -1,0 +1,381 @@
+---
+title: "Meet the UNHCR refugee datasets"
+subtitle: "Before calculating anything, understand what the data measures"
+---
+
+::: {.callout-note title="Learning goals"}
+Understand where UNHCR refugee statistics come from; recognize the eight datasets in the `refugees` package; distinguish population groups, stocks, applications, and decisions; inspect a tibble and its variables; identify the unit of observation; and recognize important limitations before making comparisons.
+:::
+
+## Where do these statistics come from?
+
+Throughout this exercises we will work with real statistics on forced displacement and international protection. Our main source is the [UNHCR Refugee Data Finder](https://www.unhcr.org/refugee-statistics/), which brings together information about refugees, asylum-seekers, internally displaced persons, stateless people, and related populations.
+
+**UNHCR does not individually count every displaced person in the world.** The statistics are compiled from several sources, principally information provided by national governments and UNHCR operations. Depending on the country and indicator, those sources may use administrative records, registration systems, surveys, or estimates. The `refugees` R package also includes datasets based on the work of the [Internal Displacement Monitoring Centre (IDMC)](https://www.internal-displacement.org/) and the [United Nations Relief and Works Agency for Palestine Refugees in the Near East (UNRWA)](https://www.unrwa.org/).
+
+This distinction matters: the data do not come from a single worldwide survey with identical questions, reporting systems, and coverage in every country. They are the result of **statistical reporting and compilation**, and their meaning depends on the definitions and systems used to produce them.
+
+::: {.callout-tip title="Why is this important for our research?"}
+Two countries may both report a number of asylum applications, but their asylum systems may use different administrative procedures, reporting conventions, and units (for example, persons versus cases). Before comparing them, we need to check whether the reported numbers measure sufficiently similar things.
+:::
+
+### What time period do the data cover?
+
+UNHCR's population-statistics series goes back to **1951**, but this does **not** mean that every variable exists for every country since 1951. Asylum-seeker figures, for example, become available much later, and some population categories were introduced more recently. The completeness of reporting also varies by country and year.
+
+UNHCR generally publishes **end-year** and **mid-year** statistical releases. The package used here provides prepared datasets: **installing a package does not automatically download a fresh copy of the live UNHCR database every time you open R**. To use newer figures, you may need an updated package or a direct download from UNHCR.
+
+We will inspect the years that are actually available in *our installed package*, rather than assuming that everyone has the same version.
+
+To see why a single start date is misleading, UNHCR's methodology provides the following **first years of global availability** for selected statistical categories. These are not guarantees that every country has observations from that year onward.
+
+| Statistical category | First year reported in UNHCR's global series |
+|---|---:|
+| Refugees | 1951 |
+| Asylum-seekers | 2000 |
+| Internally displaced persons of concern to UNHCR | 1993 |
+| Other people in need of international protection | 2018 |
+| Stateless people | 2004 |
+| Demographic data by age and sex | 2001 |
+
+**Notice:** a dataset can have a long historical span while one of its variables is unavailable for most of that period.
+
+## What exactly is the `refugees` R package?
+
+The [`refugees` package](https://populationstatistics.github.io/refugees/) makes UNHCR-related statistics available as **R datasets**. Instead of manually downloading a CSV file and importing it, we can open a prepared table by writing, for example, `refugees::population`.
+
+The package documents **eight datasets**:
+
+| Dataset | Main content | Type of information / caution |
+|---|---|---|
+| `population` | Refugees, asylum-seekers, IDPs, stateless people, and other population groups | Primarily end-of-year population figures; inspect each category |
+| `asylum_applications` | Applications for international protection | Applications during a period; distinguish types of application and cases/persons |
+| `asylum_decisions` | Outcomes of asylum procedures | Decisions during a period; distinguish outcome, procedure, and cases/persons |
+| `demographics` | Age, sex, and available subnational information | Disaggregation is not equally available everywhere |
+| `solutions` | Returns, resettlement arrivals, and naturalisation | Events occurring during a period, **not** people remaining at year-end |
+| `flows` | Figures on people forced to flee in a year | A flow measure, different from the stock residing somewhere |
+| `idmc` | IDMC statistics on internal displacement due to conflict and violence | Source and coverage differ from some UNHCR population series |
+| `unrwa` | Registered Palestine refugees under UNRWA's mandate | A distinct reporting system and population definition |
+
+In our first exercises, we will concentrate on **three tables**: `population`, `asylum_applications`, and `asylum_decisions`. Later, the demographic and solutions datasets may be useful for investigating other aspects of refugee protection.
+
+::: {.callout-important title="A package is not the same thing as its underlying data source"}
+The R package is a convenient way to access and work with data. **UNHCR and the other named statistical producers are the underlying data sources.** When presenting results, we should identify both the dataset and the reference period or release, rather than citing only the R package.
+:::
+
+## Before opening a table: who is being counted?
+
+Terms that sound similar can refer to different groups. We should not simply add all categories together or call all of them "refugees".
+
+| Concept | Meaning in this exercise | Why it matters |
+|---|---|---|
+| **Refugees** | People reported in UNHCR's refugee statistical category | Not all people who crossed a border, and not necessarily all people receiving another form of protection |
+| **Asylum-seekers** | People with asylum claims awaiting a final determination, as captured by the statistical system | A population count of people still seeking protection; **not** the number of new applications in the year |
+| **Other people in need of international protection (`oip`)** | People reported in a separate UNHCR category of international protection need | Their statistical treatment is distinct from `refugees`; inclusion changes the indicator |
+| **Internally displaced persons (IDPs)** | People displaced **within** their country | They have not necessarily crossed an international border |
+| **Stateless persons** | People reported as not being considered nationals by any state under the operation of its law | Statelessness and forced displacement are not equivalent, and overlaps may occur |
+| **Returned refugees / IDPs** | People who returned during a reporting period | Return is an **event or flow**, not a stock of people still abroad |
+
+For a precise definition of each group, see the [UNHCR methodology](https://www.unhcr.org/refugee-statistics/methodology). UNHCR's definitions and reporting conventions can evolve; this is especially relevant for a project that compares countries and years.
+
+::: {.callout-warning title="Do not combine categories without a definition"}
+For example, `refugees` and `oip` are separate columns in the population table. If we add them, we must label the resulting measure **"refugees plus other people in need of international protection"**, not simply "refugees". Similarly, statelessness can overlap with displacement in particular reporting arrangements, so a naïve sum across all columns is not a reliable total of distinct people.
+:::
+
+## Look inside a real table
+
+We are now ready to open the data. Remember from the previous chapter that an **object** is something stored in R's memory and that a **data frame** is a table with rows and columns. A **tibble** is a modern kind of data frame: it displays the data more compactly, but we can still think of it as a table.
+
+```{r}
+library(refugees)
+library(dplyr)
+
+# Store the package's population table in an object called pop
+pop <- refugees::population
+
+# Inspect the beginning and the structure of the table
+head(pop)
+glimpse(pop)
+```
+
+The first line loads the `refugees` package. The second loads `dplyr`, which supplies convenient tools for exploring data. The expression `pop <- refugees::population` creates a **new name**, `pop`, for the dataset we want to explore. It does not change the original data stored in the package.
+
+- `head(pop)` prints the first six rows.
+- `glimpse(pop)` lists the variables, their types, and example values.
+- The first rows are **not necessarily representative** of the whole dataset. They help us recognize its structure.
+
+We can also ask R about its dimensions:
+
+```{r}
+nrow(pop)       # Number of rows (observations)
+ncol(pop)       # Number of columns (variables)
+names(pop)     # Names of the columns
+```
+
+To explore the data in RStudio's spreadsheet-style viewer, run this in the **Console** (rather than in the published Quarto book):
+
+```{r}
+#| eval: false
+View(pop)
+```
+
+### Check which version of the data you have
+
+```{r}
+packageVersion("refugees")
+range(pop$year, na.rm = TRUE)
+max(refugees::asylum_applications$year, na.rm = TRUE)
+max(refugees::asylum_decisions$year, na.rm = TRUE)
+```
+
+Here `packageVersion()` reports the installed package version. `range()` reports the smallest and largest years contained in the `year` column; `max()` returns the latest year in each of the two asylum-procedure tables. These values may change as the package is updated.
+
+::: {.callout-note title="Why might your classmate see a different number of rows?"}
+Datasets can be corrected, expanded, or updated in a newer package release. This is why we record our source and software version rather than assuming the same dataset will always have the same number of rows.
+:::
+
+## Learn to read the population data dictionary
+
+Every dataset has a **data dictionary**: a guide explaining what each variable represents and how it is recorded. In the `population` table, the key variables are:
+
+| Variable | What it represents | Example / caution |
+|---|---|---|
+| `year` | Reference year | For example, 2022: for the main population categories, an end-of-year figure |
+| `coo_name` | Country or territory of origin, displayed as a name | "Syrian Arab Rep."; may also include unknown or other reporting categories |
+| `coo` | UNHCR's origin code | **Not always identical** to an ISO country code |
+| `coo_iso` | Standardized origin code supplied in the data | Useful for many cross-country comparisons, but not every code denotes a sovereign state |
+| `coa_name` | Country or territory of asylum / reporting residence | "Germany" |
+| `coa` | UNHCR's asylum-country code | Can differ from `coa_iso` |
+| `coa_iso` | Standardized asylum-country code | `DEU` = Germany; `ESP` = Spain |
+| `refugees` | Number reported in the refugee category | Normally interpreted as an end-of-year stock |
+| `asylum_seekers` | Number reported in the asylum-seeker category | Stock, **not** applications filed during that year |
+| `oip` | Other people in need of international protection | A separate population category; not available throughout the whole series |
+| `idps` | Internally displaced persons in the relevant reporting category | Displacement within a country |
+| `stateless` | Reported stateless persons | Possible overlap in statistical reporting with other statuses |
+| `returned_refugees` | Refugees reported as returning | Refers to return over the reference period; do not treat as a resident stock |
+| `returned_idps` | Reported IDP returnees | Return during a period |
+| `ooc` | Others of concern to UNHCR | A distinct category requiring its own definition |
+| `hst` | Host-community members | Not another category of refugees |
+
+**How should we understand origin and asylum country?** Consider an Afghan refugee residing in Germany. Afghanistan is the **country of origin** (`coo_name`), while Germany is the **country of asylum** (`coa_name`). If our question is how many refugees are hosted by Germany, we need to include people from *many* origins.
+
+::: {.callout-note title="Names versus codes"}
+A country name is useful for reading a table, whereas a country code can be more convenient for filtering or combining datasets. But UNHCR codes and ISO codes are not always identical, and some observations relate to territories, unknown origins, or other non-standard reporting categories. Always inspect the coding rules before merging with an external country dataset.
+:::
+
+## What does one row actually represent?
+
+For the `population` table, a typical observation corresponds to a **reference year × country of origin × country of asylum**. It contains several population-category counts for that combination.
+
+Here is a *fictional* illustration of the table structure:
+
+| Year | Origin | Country of asylum | Refugees |
+|---|---|---|---:|
+| 2022 | Country A | Country X | 1,000 |
+| 2022 | Country B | Country X | 2,500 |
+| 2022 | Country C | Country X | 500 |
+
+These are **three rows**, but all three refer to the same host country and year. If we wanted the total number in Country X's refugee category, we would need to **add across origins**: 1,000 + 2,500 + 500 = 4,000.
+
+In other words, a row in the raw data is **not automatically a country-year total**. Counting rows would give us the number of recorded origin-destination combinations, not the number of refugees.
+
+### Examine Germany in 2022
+
+```{r}
+germany_2022 <- pop |>
+  filter(year == 2022, coa_iso == "DEU")
+
+germany_2022 |>
+  select(year, coo_name, coa_name, refugees, asylum_seekers) |>
+  head(10)
+```
+
+Read `|>` as **"and then"**: start with `pop`, *then* keep rows from 2022 in Germany, *then* select a few columns, *then* show the first ten rows. We will practice this way of writing R code in detail in the next chapter.
+
+To see why the unit of observation matters, ask:
+
+```{r}
+nrow(germany_2022)                         # How many records?
+sum(germany_2022$refugees, na.rm = TRUE)    # Sum the refugee counts
+sum(is.na(germany_2022$refugees))           # How many missing counts?
+```
+
+These three commands answer *different* questions. `nrow()` counts records; `sum()` adds values; `is.na()` identifies missing values. The reported total also depends on how missing and special reporting categories are treated. We will learn more about aggregation in the next chapter.
+
+::: {.callout-important title="Always write a complete measurement statement"}
+"Germany had X refugees" is incomplete. A better statement is: "The dataset reports X people in the `refugees` category residing in Germany at the **end of 2022**, summed across the recorded countries of origin." A publishable statement should also identify its data source and any exclusions or special reporting rules.
+:::
+
+## A stock is not a flow
+
+Three ideas are easy to confuse:
+
+| Measure | Plain-language question | Example |
+|---|---|---|
+| **Stock** | How many people are in a category **at a particular moment**? | Refugees residing in a host country at the end of 2022 |
+| **Flow** | How many events or movements occur **during a period**? | Refugee returns or resettlement arrivals during 2022 |
+| **Administrative event** | How many procedural actions are recorded **during a period**? | Asylum applications lodged or decisions issued in 2022 |
+
+Imagine that the reported end-of-year refugee stock increases from 200,000 to 230,000. The difference is **30,000**, but it would be incorrect to conclude that exactly 30,000 refugees arrived. Entries, exits, births, deaths, changes in status or registration, and revisions to estimates may all affect the measured stock.
+
+Likewise, an asylum application is **not the same thing as an arrival**, and a decision made in 2022 may concern an application originally filed in 2021 or earlier.
+
+::: {.callout-warning title="Important detail about the `population` table"}
+The table is mainly used for end-year population figures, but it also contains categories such as `returned_refugees` and `returned_idps`, which refer to return during a reporting period. **Do not assume that every numeric column in a table called `population` is the same kind of stock.** Read the definition of the specific variable you are using.
+:::
+
+## Use a small, documented example
+
+The exercise includes a small CSV file containing ten 2022 origin-country values reproduced from an example in the [`refugees` package documentation](https://populationstatistics.github.io/refugees/). We use it because the smaller table makes sorting and summary statistics easier to understand. Its measure combines **`refugees` + `oip`**; it is not simply the `refugees` category.
+
+```{r}
+top_origins <- readr::read_csv(
+  "data/unhcr_origin_top10_2022.csv",
+  show_col_types = FALSE
+)
+top_origins
+```
+
+This CSV comes with the exercise files. The path beginning with `data/` works because the file is stored inside the Quarto project.
+
+```{r}
+sort(top_origins$refugees_plus_oip)
+mean(top_origins$refugees_plus_oip)
+```
+
+**Question:** Does the mean describe the average for *all* countries of origin? **No.** It describes only the ten countries selected for this example. These are among the largest reported origins, so the result is not representative of a typical origin country.
+
+## Meet the applications and decisions datasets
+
+Now we can introduce two other important tables. Both concern asylum procedures, rather than the year-end stock of refugees residing in a country.
+
+### Asylum applications: what was filed?
+
+The `asylum_applications` table reports applications filed within a reference period, broken down by origin, asylum country, and available information on procedure and application type.
+
+```{r}
+apps <- refugees::asylum_applications
+
+names(apps)
+apps |>
+  select(year, coo_name, coa_name, procedure_type,
+         app_type, dec_level, app_pc, applied) |>
+  head(5)
+```
+
+Some particularly important fields are:
+
+| Field | Meaning | Why check it? |
+|---|---|---|
+| `applied` | Reported number of applications | This is the count being analysed |
+| `app_type` | Type of application | `N` = new; `R` = repeat; `A` = appeal; combined reporting types also exist |
+| `procedure_type` | Authority responsible for the procedure | For example, `G` = government, `J` = joint, `U` = UNHCR |
+| `dec_level` | More detail about the procedural stage | Matters when distinguishing administrative and review stages |
+| `app_pc` | Whether the report counts **persons** (`P`) or **cases** (`C`) | A case can contain more than one person |
+
+For example, 100 **cases** are not necessarily the same as 100 **people**. If countries report different units, adding or comparing the numbers without checking `app_pc` may be misleading.
+
+Also, a second application or an appeal should not automatically be interpreted as a new person seeking protection for the first time. In some national reporting systems, distinct application types cannot be separated and are reported together.
+
+Inspect the categories in the actual table:
+
+```{r}
+table(apps$app_type, useNA = "ifany")
+table(apps$app_pc, useNA = "ifany")
+```
+
+`table()` counts how many **rows** contain each code. It does **not** add up the number of applicants in `applied`. We will learn how to produce grouped totals later.
+
+### Asylum decisions: what outcomes were recorded?
+
+The `asylum_decisions` table records decisions issued during the reference period. The key outcome fields are:
+
+| Field | Meaning |
+|---|---|
+| `dec_recognized` | Refugee recognition |
+| `dec_other` | Other or complementary forms of protection |
+| `dec_rejected` | Rejected applications |
+| `dec_closed` | Applications otherwise closed, including administrative closures |
+| `dec_total` | Total recorded decisions |
+| `dec_pc` | Whether the count refers to cases or persons |
+| `dec_level` | Stage or level of the procedure |
+
+```{r}
+decisions <- refugees::asylum_decisions
+
+names(decisions)
+decisions |>
+  select(year, coo_name, coa_name, procedure_type, dec_level,
+         dec_pc, dec_recognized, dec_other,
+         dec_rejected, dec_closed, dec_total) |>
+  head(5)
+```
+
+Positive decisions, rejections, and administrative closures are not substantively equivalent. Likewise, decisions recorded at different procedural stages should not always be treated as independent outcomes for distinct applicants.
+
+::: {.callout-important title="Applications in 2022 are not the same cohort as decisions in 2022"}
+Someone who submitted an application in 2022 might receive a decision in 2023 or later. Conversely, a decision issued in 2022 may concern an application from an earlier year. Therefore, dividing **recognitions in 2022** by **applications submitted in 2022** does **not** measure an individual applicant's probability of recognition. We will return to appropriate decision-based denominators in the asylum decisions chapter.
+:::
+
+## What are the main limitations of these data?
+
+These are valuable cross-national statistics, but they require interpretation. In particular:
+
+1. **Coverage differs across countries and years.** A variable may be unavailable in a country or in earlier periods. A missing value is not automatically a zero.
+2. **Definitions can change.** New legal statuses, data categories, or registration rules can affect comparisons over time.
+3. **Countries have different administrative systems.** Procedures, appeals, and reporting levels are not necessarily identical.
+4. **The reporting unit matters.** Some application and decision figures count persons, while others count cases.
+5. **Some data are rounded or otherwise protected.** UNHCR applies statistical-disclosure safeguards, so very small published counts and some totals may be approximate.
+6. **The meaning of a country code depends on the table.** For example, in a returns or resettlement dataset, the location variable may refer to the place of departure or arrival rather than to a year-end residence.
+7. **Published values may be revised.** A later release can incorporate more complete reporting or revised estimates.
+
+None of these limitations means we should avoid using the data. They mean that **our conclusions should match the data's definitions, coverage, and level of observation**.
+
+### A simple checklist for any variable
+
+Before presenting a statistic, ask yourself:
+
+| Question | Example |
+|---|---|
+| **Who?** | Recognized refugees, asylum-seekers, or applicants? |
+| **Where?** | Country of origin or country of asylum? |
+| **When?** | End of year or during the year? |
+| **What unit?** | Persons, cases, decisions, or origin-country records? |
+| **Which category?** | Refugee status alone, or refugee plus complementary protection? |
+| **How complete?** | Are any years, countries, or observations missing? |
+| **Which source/version?** | Which UNHCR release or R package version? |
+
+For the RefLex project, this is also the first step towards **measurement validity**: deciding whether an available statistic actually captures the aspect of refugee-law effectiveness that we want to study.
+
+## Exercise: become a data detective
+
+Keep your answers in your R practice script. You do not need to know advanced statistics to complete these exercises: the objective is to **learn to inspect and question a dataset before analysing it**.
+
+1. Run `packageVersion("refugees")`. Which version do you have? What are the first and last years in `population`?
+2. How many rows and columns does `population` contain? Why might a classmate obtain a different answer with a newer package release?
+3. Explain, in your own words, the difference between `coo_name` and `coa_name`. What do `coo_iso` and `coa_iso` add?
+4. Does `asylum_seekers` in `population` measure new asylum applications lodged during the calendar year? Explain why or why not.
+5. Find population observations for Spain in 2022 by changing `coa_iso == "DEU"` to `coa_iso == "ESP"`. Display five rows. What does each row represent?
+6. Does `nrow()` tell you how many refugees Spain hosted? If not, what would you need to calculate?
+7. Inspect `apps$app_pc` and `apps$app_type` using `table()`. What is the difference between a case and a person? Why are appeals important?
+8. Find the names of the decision columns for refugee recognition, complementary protection, rejections, and administrative closures.
+9. In two sentences, explain why **2022 decisions / 2022 applications** is not an individual recognition probability.
+10. Write a short measurement statement for the **refugees stock in Spain at the end of 2022**. Make explicit the population group, country, reference time, and source.
+11. Explain why the mean of the **top ten** origins in the small CSV is not an estimate of the mean across all origins.
+
+::: {.callout-tip title="Take-home check"}
+You understand this chapter when you can open an unfamiliar dataset, explain what its **rows and columns** represent, tell a **stock** from a **flow**, and identify at least two reasons why an apparently simple cross-country comparison may be misleading.
+:::
+
+## Sources and further reading
+
+- [UNHCR Refugee Data Finder](https://www.unhcr.org/refugee-statistics/)
+- [UNHCR methodology and population definitions](https://www.unhcr.org/refugee-statistics/methodology)
+- [`refugees` R package documentation](https://populationstatistics.github.io/refugees/)
+- [Documentation of the `population` dataset](https://populationstatistics.github.io/refugees/reference/population.html)
+- [Documentation of `asylum_applications`](https://populationstatistics.github.io/refugees/reference/asylum_applications.html)
+- [Documentation of `asylum_decisions`](https://populationstatistics.github.io/refugees/reference/asylum_decisions.html)
+
+For research outputs, record the data source, reference year, date or version of the data used, and the code that produced the analysis. UNHCR publishes data-use and attribution information on its website; the `refugees` package documentation also provides citation and licensing details.
+
+**Next:** We will learn how to filter, group, and transform rows into carefully defined comparisons.

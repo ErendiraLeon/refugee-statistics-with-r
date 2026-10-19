@@ -1,0 +1,57 @@
+---
+title: "Resources, credits and how to cite"
+subtitle: "Further reading and careful source documentation"
+number-sections: false
+---
+
+These materials are designed for **self-paced, optional practice**. You can use a single section, follow several exercises in sequence, or consult a reference only when you need it. Nothing here requires completing a formal assessment.
+
+## Getting started with R
+
+- [Hands-On Programming with R — Getting Started](https://rstudio-education.github.io/hopr/starting.html): installation, RStudio and first commands.
+- [R for Data Science (2e)](https://r4ds.hadley.nz/), by Hadley Wickham, Mine Çetinkaya-Rundel and Garrett Grolemund: extensive explanations and worked exercises. Especially useful are [workflow basics](https://r4ds.hadley.nz/workflow-basics.html), [data transformation](https://r4ds.hadley.nz/data-transform.html), [data tidying](https://r4ds.hadley.nz/data-tidy.html), [visualization layers](https://r4ds.hadley.nz/layers.html), [exploratory data analysis](https://r4ds.hadley.nz/EDA.html), and [code style](https://r4ds.hadley.nz/workflow-style.html).
+- [R project](https://www.r-project.org/), [CRAN](https://cran.r-project.org/) and [RStudio Desktop](https://posit.co/download/rstudio-desktop/): official software and package information.
+- [Quarto documentation](https://quarto.org/docs/): creating `.qmd` documents, rendering R code, and [publishing on GitHub Pages](https://quarto.org/docs/publishing/github-pages.html). Quarto is used to publish these materials; learners do not need it merely to run R exercises.
+
+## Packages used in these exercises
+
+- [`refugees` package](https://populationstatistics.github.io/refugees/), including its documentation for [population](https://populationstatistics.github.io/refugees/reference/population.html), [applications](https://populationstatistics.github.io/refugees/reference/asylum_applications.html) and [decisions](https://populationstatistics.github.io/refugees/reference/asylum_decisions.html).
+- [`dplyr`](https://dplyr.tidyverse.org/) for transforming and aggregating data; [`tidyr`](https://tidyr.tidyverse.org/) for reshaping and joins-related workflows.
+- [`ggplot2`](https://ggplot2.tidyverse.org/) for graphics; [`scales`](https://scales.r-lib.org/) for displaying numeric quantities and percentages.
+- [`broom`](https://broom.tidymodels.org/) for extracting model results into tables; [`stargazer` on CRAN](https://cran.r-project.org/package=stargazer) and [`modelsummary`](https://modelsummary.com/) for regression tables; [`sandwich`](https://sandwich.r-forge.r-project.org/) and [`lmtest`](https://cran.r-project.org/package=lmtest) for selected model diagnostics and standard-error calculations.
+
+Package names on this page are **tools**, not recommendations that everyone must learn or install every package. The inference exercises identify the additional packages they need.
+
+## Refugee statistics and definitions
+
+- [UNHCR Refugee Data Finder](https://www.unhcr.org/refugee-statistics/): official portal to explore reported refugee and asylum statistics and methodological information.
+- [UNHCR Data Visualization Guidance](https://dataviz.unhcr.org/): practical advice on displaying displacement statistics clearly.
+- Always check the **underlying definition** before reusing a number: end-of-year stock versus annual applications or decisions; origin versus asylum country; reported persons versus cases; initial versus appeal level; and treatment of non-substantive decisions.
+
+## Attribution and limitations
+
+The fixed ten-origin 2022 example in `data/unhcr_origin_top10_2022.csv` reproduces values used in the `refugees` package documentation for the combined `refugees + oip` measure. These are **selected origin observations**, not a random sample of all origins. The dataset `data/toy_asylum_decisions.csv`, together with fictional jurisdiction and claim-level examples, exists **only for learning** and must not be treated as real asylum evidence.
+
+Other calculations are generated when the teaching materials are rendered against the installed `refugees` package version. Results may change when the package or its source data are updated. The materials are independently prepared; they are **not an official UNHCR statistical product or an institutional statement on behalf of UCD**.
+
+These explanations and exercises are original teaching material, informed by the pedagogical approach of *R for Data Science*; they do not reproduce its text or illustrations. When drawing on R packages or published datasets in research, cite their documentation and primary sources as appropriate.
+
+## Recording a reproducible analysis
+
+For an exercise or research output, keep the R script (or `.qmd` source), the data source, the date and definitions used, and relevant software versions. For example:
+
+```{r}
+#| eval: false
+packageVersion("refugees")
+R.version.string
+sessionInfo()
+```
+
+`sessionInfo()` also records the session's loaded packages and platform information. For work intended to be rerun long after publication, also consider saving a package-version lockfile (for example using `renv`) and recording source-data release/version information when available. A saved script does not by itself resolve missingness, sampling, or cross-country comparability concerns.
+
+## Questions or corrections
+
+**Eréndira León-Salvador**  
+Postdoctoral Research Fellow (ERC RefLex: *Is International Refugee Law Effective?*)  
+UCD College of Social Sciences & Law  
+✉ [erendira.leonsalvador@ucd.ie](mailto:erendira.leonsalvador@ucd.ie)

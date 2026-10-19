@@ -1,0 +1,146 @@
+---
+title: "Asylum applications, decisions, and protection rates"
+subtitle: "An exercise in statistics—and in getting the denominator right"
+---
+
+::: {.callout-note title="Learning goals"}
+Distinguish application, decision, stock, case, and person; build a protection rate from decision counts; understand why same-year applications are not an appropriate denominator for an individual acceptance probability.
+:::
+
+## Three measures that cannot be substituted for one another
+
+Imagine a country with **100 applications received**, **80 decisions made**, and an **end-of-year asylum-seeker stock of 600**. All three could be correct. The applications are new or procedurally specified claims during the period; the decisions are outcomes made during the period, which may resolve claims submitted earlier; and the stock is a count at a moment in time.
+
+| Measurement | Dataset | Typical unit/time | Can it be the denominator of a recognition rate? |
+|---|---|---|---|
+| End-of-year asylum seeker stock | `population$asylum_seekers` | Stock, at year end | Not as a decision-based recognition rate |
+| Annual asylum claims | `asylum_applications$applied` | Claims lodged within a period | Not directly for outcomes made that year |
+| Annual substantive decisions | `asylum_decisions` outcome columns | Decisions made within a period | Yes, **for a descriptive share among substantive decisions** |
+
+More subtle questions arise about cases versus persons and initial versus appeal decisions. We must take those distinctions seriously before aggregating data.
+
+## Start with a small **fictional** exercise
+
+The five fictitious countries below are designed to make the arithmetic transparent. These are **not** actual UNHCR records or real jurisdictions.
+
+```{r}
+library(readr)
+library(dplyr)
+library(ggplot2)
+
+toy <- read_csv("data/toy_asylum_decisions.csv", show_col_types = FALSE)
+toy
+```
+
+The outcome categories are: `recognized` (refugee recognition), `other_protection` (complementary/other protection), `rejected`, and `closed` (closed without one of the three substantive outcomes). The toy table separates them deliberately so you can practice choosing a denominator.
+
+## Compute two different decision-based rates
+
+A simplified **refugee recognition rate** among substantive outcomes is:
+
+$$R = \frac{\text{refugee recognitions}}{\text{refugee recognitions} + \text{other protection} + \text{rejections}}.$$
+
+A simplified **total protection rate** among substantive outcomes is:
+
+$$P = \frac{\text{refugee recognitions} + \text{other protection}}{\text{refugee recognitions} + \text{other protection} + \text{rejections}}.$$
+
+Different institutions and published series may use different outcome categories, procedural levels, exclusions and terminology. These operational definitions are explicit teaching versions for this chapter. The key is to define the numerator, denominator, and underlying records.
+
+```{r}
+toy_rates <- toy |>
+  mutate(
+    substantive = recognized + other_protection + rejected,
+    recognition_pct = if_else(substantive > 0,
+                              100 * recognized / substantive, NA_real_),
+    protection_pct = if_else(substantive > 0,
+                             100 * (recognized + other_protection) / substantive,
+                             NA_real_)
+  )
+
+toy_rates |>
+  select(country, substantive, recognition_pct, protection_pct)
+```
+
+Check *Albia* manually: recognition rate = 45/(45+15+40) = 45%; total protection rate = (45+15)/(45+15+40) = 60%. If you include `closed` in the denominator you would obtain different figures and answer a different question. Always specify what was counted.
+
+## Visualize the toy rates
+
+```{r}
+#| label: fig-toy-protection
+#| fig-cap: "Illustrative protection rates for five fictional countries. These are teaching values—not UNHCR observations."
+ggplot(toy_rates, aes(x = protection_pct,
+                      y = reorder(country, protection_pct))) +
+  geom_col(fill = "#2475a6", width = .65) +
+  scale_x_continuous(limits = c(0, 100), breaks = seq(0, 100, 20)) +
+  labs(x = "Protection rate among substantive outcomes (%)", y = NULL,
+       title = "Why denominators matter") +
+  theme_minimal()
+```
+
+A rate can provide a useful summary—but it does not automatically establish that a system's adjudication is fair or effective. Differences may also reflect applicants' country of origin, legal channels, procedural stage, and reporting practices.
+
+## Move to real UNHCR decision data
+
+The package's `asylum_decisions` contains the actual fields `dec_recognized`, `dec_other`, `dec_rejected`, `dec_closed`, `dec_total`, `dec_level`, `procedure_type` and `dec_pc`. First inspect the categories and documentation before summing them.
+
+```{r}
+library(refugees)
+dec <- refugees::asylum_decisions
+
+names(dec)
+dec |> count(dec_level, sort = TRUE)
+dec |> count(dec_pc, sort = TRUE)
+dec |> count(procedure_type, sort = TRUE)
+```
+
+`dec_pc` indicates cases versus persons. A case may cover more than one person, so combining rows without examining this indicator could produce an inconsistent total. `dec_level` distinguishes levels of decision-making. For a carefully comparable analysis we would define inclusion rules for these dimensions first.
+
+For now, calculate a **descriptive rate for a narrowly defined subset**: government procedures (`G`), new-application/initial decision level (`NA`), a single destination, a single year, and a consistent reporting unit. We let R show what reporting units are present first; do not silently merge them.
+
+```{r}
+dec_subset <- dec |>
+  filter(year == 2022,
+         coa_iso == "DEU",
+         procedure_type == "G",
+         dec_level == "NA")
+
+dec_subset |> count(dec_pc)
+```
+
+The next code uses only rows explicitly recorded as **persons** (`P`) if present. If this subset is empty, do not interpret a missing rate as zero; inspect the coding and decide on a defensible alternative. Different versions/sources can have different coverage.
+
+```{r}
+germany_person_decisions <- dec_subset |>
+  filter(dec_pc == "P") |>
+  summarise(
+    recognized = sum(dec_recognized, na.rm = TRUE),
+    other = sum(dec_other, na.rm = TRUE),
+    rejected = sum(dec_rejected, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  mutate(
+    substantive = recognized + other + rejected,
+    protection_pct = if_else(substantive > 0,
+      100 * (recognized + other) / substantive, NA_real_)
+  )
+
+germany_person_decisions
+```
+
+If the package encodes the persons category differently, check `unique(dec_subset$dec_pc)` and consult the source documentation before adjusting the filter. This code is an **exercise**, not a ready-made official recognition-rate series.
+
+## What the rate does *not* mean
+
+A 60% decision-based protection rate would mean that 60% of the **substantive outcomes included in the denominator** were refugee recognitions or other protection grants. It does not mean that *60% of everyone who applied in 2022* eventually obtained protection. It does not necessarily measure the probability a randomly selected individual will receive protection. Such probabilities require linked cohorts, consistent units and a clear design.
+
+::: {.callout-important title="Research question for RefLex"}
+A protection indicator reflects institutional outcomes, but its interpretation depends on who entered the procedure, what stage was counted, reporting quality, and which legal outcomes count as protection. Comparing rates across destinations without inspecting these differences can confound effectiveness with case composition or measurement.
+:::
+
+## Exercise: interrogate the denominator
+
+1. Calculate the toy refugee recognition rate and total protection rate for each fictional country. What explains their difference?
+2. Recalculate a deliberately **incorrect** protection rate by adding `closed` to the denominator. Which countries change most? Explain why it is not the same measure.
+3. Compare rates for Albia and Borelia. Does the comparison alone establish that Albia offers more effective legal protection?
+4. Run `count(dec_pc)` and `count(dec_level)` on the actual package. Why might grouping all records be risky?
+5. Write a short data-definition note for a real analysis specifying outcome categories, year, geography, procedural level, reporting unit and exclusions.

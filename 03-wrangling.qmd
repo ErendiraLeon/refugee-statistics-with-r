@@ -1,0 +1,950 @@
+---
+title: "Transform data with dplyr"
+subtitle: "From rows and columns to meaningful comparisons"
+---
+
+::: {.callout-note title="Learning goals"}
+By the end of this section, you should be able to read a pipeline from left to right; use `filter()`, `arrange()`, `distinct()`, `select()`, `rename()`, `mutate()`, `group_by()`, and `summarise()`; explain what each operation does to a table; write clear, readable R code; and check that your summaries have the right unit, population, and denominator.
+:::
+
+## Why do we need to transform data?
+
+A dataset rarely arrives in exactly the form needed to answer a research question. Imagine asking: *Which countries hosted the largest recorded refugee populations at the end of 2022?* The UNHCR `population` table contains many years, origin countries, asylum countries, and population categories. We must select the relevant observations and variables, and then decide whether the numbers need to be combined.
+
+This process is called **data transformation** (sometimes *data wrangling*). It is not simply about making a table look nicer. Each transformation makes a decision about **which information is included** and **what one row of the resulting table represents**.
+
+We will use the [`dplyr` package](https://dplyr.tidyverse.org/). Its functions are often called **verbs**, because each performs a recognizable action: filter rows, select columns, create a variable, or summarize groups. 
+
+::: {.callout-important title="Keep the research question in view"}
+Before changing a dataset, ask yourself: **Which people or cases? Which countries? Which year? Which population category? One row per what?** R can execute a perfectly valid command that answers the wrong research question.
+:::
+
+## Getting ready: a table and a few new functions
+
+Load the packages and save the real UNHCR table in an object called `pop`:
+
+```{r}
+library(refugees)
+library(dplyr)
+library(tidyr)
+
+pop <- refugees::population
+
+glimpse(pop)
+```
+
+As we learned earlier, `pop` is the **name of an object** that contains a data frame (in this case, a *tibble*). The columns are **variables**, and each row is an **observation**. A tibble is a modern version of an R data frame; it prints only the rows and columns that fit on the screen.
+
+We will first practice on a small, **entirely fictional** table. This makes it possible to predict what an operation should do before we use it on thousands of UNHCR records.
+
+```{r}
+# A fictional teaching dataset; these are NOT UNHCR figures.
+practice_pop <- tibble::tibble(
+  year = c(2021, 2021, 2022, 2022, 2022, 2022, 2022, 2022),
+  coa_iso = c("DEU", "FRA", "DEU", "DEU", "DEU", "FRA", "FRA", "FRA"),
+  coo_name = c(
+    "Afghanistan", "Syria", "Afghanistan", "Syria",
+    "Venezuela", "Afghanistan", "Syria", "Venezuela"
+  ),
+  refugees = c(100, 90, 120, 200, 25, 80, 95, 15),
+  asylum_seekers = c(10, 15, 12, 20, 5, 8, 14, 3)
+)
+
+practice_pop
+```
+
+Read each row as a **year × destination × origin** observation. For example, the fictional value `120` represents the `refugees` category for the Afghanistan–Germany combination in 2022. It is not Germany's total. The table deliberately contains more than one origin within each destination in 2022.
+
+We will return to `pop`—the real dataset—after learning how each function works.
+
+## The basic idea: verbs that change a table
+
+Most `dplyr` verbs have a similar structure:
+
+```{r}
+#| eval: false
+
+function_name(data_frame, instructions)
+```
+
+The first argument is usually a table. The other arguments tell R what to do. Importantly, **the result is another table**. Running a `dplyr` command does not automatically overwrite the original object.
+
+Here is a guide to the main verbs we will learn:
+
+| Function | Plain-language meaning | What changes? |
+|---|---|---|
+| `filter()` | Keep observations meeting a condition | Which **rows** remain |
+| `arrange()` | Sort observations | **Order** of rows |
+| `distinct()` | Find unique values or row combinations | Usually **rows** |
+| `select()` | Keep certain variables | Which **columns** remain |
+| `rename()` | Change the name of a variable | Column **names** |
+| `mutate()` | Create or change a variable | Column **values** or additional columns |
+| `group_by()` | Tell R which observations belong together | How the **next calculation** works |
+| `summarise()` | Produce summary values, often one row per group | **Level of aggregation** and number of rows |
+
+Rather than memorizing the entire table, try the operations one at a time.
+
+## Working with rows
+
+### `filter()`: keep observations that meet a condition
+
+Suppose we want only the fictional observations for 2022:
+
+```{r}
+filter(practice_pop, year == 2022)
+```
+
+Read this as: *take `practice_pop` and keep only rows where the year equals 2022.* Notice that `filter()` does not calculate anything; it simply removes rows that fail the condition.
+
+Now add a second condition:
+
+```{r}
+filter(practice_pop, year == 2022, coa_iso == "DEU")
+```
+
+The comma means that **both conditions** must be satisfied: 2022 **and** Germany. Also notice the difference between the symbols:
+
+- `==` **tests equality** (does `year` equal 2022?).
+- `<-` **assigns a result** to an object (stores it under a name).
+- `=` can name an argument inside a function; it is **not** the equality test we want inside `filter()`.
+
+Country codes such as `"DEU"` must be placed in quotation marks because they are character values. In contrast, `year` is the name of a column; we do not put it in quotes here.
+
+#### Several conditions
+
+| Operator | Meaning | Example |
+|---|---|---|
+| `==` | Equal to | `year == 2022` |
+| `!=` | Not equal to | `coa_iso != "DEU"` |
+| `>` / `>=` | Greater than / at least | `refugees > 100` |
+| `<` / `<=` | Less than / at most | `refugees <= 100` |
+| `&` | AND | `year == 2022 & coa_iso == "DEU"` |
+| `\|` | OR | `coa_iso == "DEU" \| coa_iso == "FRA"` |
+| `%in%` | Match any value in a vector | `coa_iso %in% c("DEU", "FRA")` |
+| `!` | NOT | `!is.na(refugees)` |
+
+Here are two ways to include Germany **or** France:
+
+```{r}
+filter(practice_pop, coa_iso == "DEU" | coa_iso == "FRA")
+
+filter(practice_pop, coa_iso %in% c("DEU", "FRA"))
+```
+
+`%in%` is particularly useful when selecting many countries. We can combine it with other conditions:
+
+```{r}
+filter(
+  practice_pop,
+  year == 2022,
+  coa_iso %in% c("DEU", "FRA")
+)
+```
+
+::: {.callout-warning title="A frequent beginner mistake"}
+Writing `year = 2022` inside `filter()` is not the same as `year == 2022`. Use **two equal signs** to test whether values match. Similarly, `coa_iso == "DEU" | "FRA"` does not correctly test both countries; write both comparisons or use `%in%`.
+:::
+
+**Predict → run → explain:** Before executing the next line, how many rows do you expect it to return? Why?
+
+```{r}
+filter(practice_pop, year == 2022, refugees > 100)
+```
+
+### `arrange()`: put rows in a useful order
+
+`arrange()` sorts a table but does **not** change which observations it contains.
+
+```{r}
+arrange(practice_pop, refugees)
+```
+
+By default, numbers appear in ascending order (smallest first). Use `desc()` for descending order:
+
+```{r}
+arrange(practice_pop, desc(refugees))
+```
+
+To sort first by year and then, within each year, by decreasing refugee stock:
+
+```{r}
+arrange(practice_pop, year, desc(refugees))
+```
+
+Be careful: the largest *row* does not necessarily correspond to the largest *country total*. Here, each row is one origin–destination–year combination.
+
+### `distinct()`: find unique values
+
+A table can contain Germany in many rows. If we only want to see which destination codes appear:
+
+```{r}
+distinct(practice_pop, coa_iso)
+```
+
+This produces one row per distinct destination code. It does **not** calculate Germany's refugee total. Nor does it mean that duplicate-looking rows in the raw data should automatically be deleted: two rows may legitimately refer to different years or origins.
+
+Another useful operation is counting how many rows belong to each destination:
+
+```{r}
+count(practice_pop, coa_iso)
+```
+
+`count()` counts **records**, not people. A destination with three records does not necessarily host more refugees than one with two records.
+
+::: {.callout-tip title="One distinction to remember"}
+`nrow()` counts rows in a table. `count()` counts rows within groups. `sum(refugees)` adds the **values in the refugee-count column**. These are three different operations—and can give very different answers.
+:::
+
+## Working with columns
+
+### `select()`: choose which variables to display
+
+Sometimes we need only a few variables for our question. `select()` keeps named columns, without changing the observations:
+
+```{r}
+select(practice_pop, year, coo_name, refugees)
+```
+
+The three names here refer to **columns** in `practice_pop`. This is why we write `year` rather than `"year"` in these examples.
+
+We can change the order of the columns simply by listing them in a different order:
+
+```{r}
+select(practice_pop, refugees, coo_name, year)
+```
+
+The two tables contain the same information but display it differently. Selecting columns does not imply that we have calculated a new quantity.
+
+### `rename()`: give a variable a clearer name
+
+Sometimes a label is too vague for a particular analysis:
+
+```{r}
+rename(practice_pop, refugee_stock = refugees)
+```
+
+Read `new_name = old_name`. The values have not changed. We have only changed how the column is named **in the returned table**. The original `practice_pop` still has a column named `refugees`.
+
+### `mutate()`: create a new variable
+
+Suppose we want a column identifying whether the fictional refugee count in a row exceeds 100:
+
+```{r}
+mutate(practice_pop, above_100 = refugees > 100)
+```
+
+`mutate()` adds a column called `above_100`. Each row receives `TRUE` or `FALSE` based on its own value of `refugees`. Unlike `summarise()`, `mutate()` generally keeps the same number of rows.
+
+We can also calculate a new numeric column:
+
+```{r}
+mutate(practice_pop, refugees_thousands = refugees / 1000)
+```
+
+Here we changed only the **unit of measurement**, not the underlying population. When working with actual UNHCR counts, converting to millions will often be more useful.
+
+::: {.callout-note title="Column or new summary table?"}
+Use `mutate()` when you want to **add information to existing observations**. Use `summarise()` when you want to **replace several observations with an aggregate**, such as a country total or yearly average. The distinction matters because the unit of analysis may change after summarizing.
+:::
+
+## The pipe: making a sequence readable
+
+We now know several verbs, but most research questions require more than one operation. For example: *keep Germany's 2022 rows, select origin and refugee stock, and sort them from largest to smallest.*
+
+Without a pipe, you could nest functions inside one another:
+
+```{r}
+arrange(
+  select(
+    filter(practice_pop, year == 2022, coa_iso == "DEU"),
+    coo_name, refugees
+  ),
+  desc(refugees)
+)
+```
+
+This works, but it can be difficult for to read, and the more we code, the more exhausting and confusing it will be. The **native R pipe** `|>` gives us a clearer sequence:
+
+```{r}
+practice_pop |>
+  filter(year == 2022, coa_iso == "DEU") |>
+  select(coo_name, refugees) |>
+  arrange(desc(refugees))
+```
+
+Read the code line by line:
+
+1. Start with `practice_pop`.
+2. **Then** keep the 2022 observations for Germany.
+3. **Then** keep only the origin and refugee-count columns.
+4. **Then** sort from highest to lowest.
+
+The pipe takes the result on its **left** and passes it as the first argument to the next function on its **right**. It does not calculate anything special by itself; it just lets us express a sequence of operations more clearly.
+
+For example, these two expressions mean the same thing:
+
+```{r}
+head(practice_pop, 3)
+
+practice_pop |> head(3)
+```
+
+The pipe `|>` is included in **R 4.1 or later**. You may also encounter `%>%` in older scripts and tutorials; that is a different pipe operator provided by the `magrittr` package and widely used with `dplyr`. We use `|>` consistently in these exercises.
+
+
+### Two ways to write a pipe: `|>` and `%>%`
+
+If you look at R code written by other researchers, you may notice that pipelines sometimes use `%>%` rather than `|>`.
+
+This is because **R has two commonly used pipe operators**:
+
+- **`|>`** is the *native R pipe*, introduced in R 4.1.0. It is built into R and does not require installing additional packages.
+- **`%>%`** comes from the `magrittr` package and is also made available when loading `dplyr` or the `tidyverse`. It was widely used before the native pipe was introduced and remains very common.
+
+Both operators allow us to pass the result of one operation to the next.
+
+For example, these two expressions produce the same result:
+
+**Using the native R pipe (`|>`):**
+
+```{r}
+pop |>
+  filter(year == 2022) |>
+  select(coo_name, coa_name, refugees) |>
+  head(5)
+```
+
+**Using the magrittr pipe (`%>%`):**
+
+```{r}
+pop %>%
+  filter(year == 2022) %>%
+  select(coo_name, coa_name, refugees) %>%
+  head(5)
+```
+
+In both cases, R starts with `pop`, keeps observations from 2022, selects three variables, and displays the first five rows.
+
+For the basic data transformations we will learn, **the two pipes can generally be used interchangeably**.
+
+However, they are not identical in every situation. The `%>%` operator offers some additional ways to specify how values are passed between functions. These differences become more relevant in advanced programming.
+
+::: {.callout-tip title="Which pipe should you use?"}
+In these exercises, we will primarily use **`|>`**, because it is built into modern versions of R and does not require an additional package. However, you should recognize **`%>%`** when reading other people's code.
+
+There is no need to rewrite existing scripts simply because they use the older pipe, provided they work correctly.
+
+**The important thing is to understand what the pipeline does, not which symbol is used.**
+:::
+
+### Writing readable pipelines
+
+When using either pipe, good formatting makes code easier to understand.
+
+I recommend:
+
+- Place each operation on a separate line.
+- Indent the operations after the first line.
+- Use spaces around operators such as `==` and `<-`.
+- Give objects descriptive names.
+- Avoid unnecessarily long pipelines that are difficult to interpret.
+
+For example:
+
+```{r}
+germany_2022 <- pop |>
+  filter(
+    year == 2022,
+    coa_iso == "DEU"
+  ) |>
+  select(
+    coo_name,
+    refugees
+  ) |>
+  arrange(desc(refugees))
+```
+
+Notice that the code follows the order of the analytical decisions: **select observations, select variables, and sort the results**.
+
+Readable code is not just a matter of style. It makes research easier to understand, debug, verify, and reproduce.
+
+
+### Saving a result
+
+A pipeline prints a result but does not automatically save it. If we want to use its output again, we assign it to a new object:
+
+```{r}
+germany_2022_practice <- practice_pop |>
+  filter(year == 2022, coa_iso == "DEU") |>
+  select(coo_name, refugees) |>
+  arrange(desc(refugees))
+
+germany_2022_practice
+```
+
+The object name `germany_2022_practice` describes its content. The original `practice_pop` is unchanged.
+
+::: {.callout-tip title="A useful habit"}
+When a pipeline represents an important stage of analysis, give the resulting table a descriptive name. This makes it easier to inspect intermediate results, check mistakes, and use the result in a later analysis.
+:::
+
+## Groups: when several observations become one
+
+We can now move from selecting rows to **aggregating** them. This is one of the most important operations when working with UNHCR data.
+
+### Why grouping matters
+
+In the fictional table, Germany in 2022 appears three times because it has records for three origins. Suppose we want the total number of refugees across those **three recorded origins**. We cannot simply use the first Germany row.
+
+First, select the correct year:
+
+```{r}
+practice_2022 <- practice_pop |>
+  filter(year == 2022)
+
+practice_2022
+```
+
+Now group the observations by destination:
+
+```{r}
+practice_2022 |>
+  group_by(coa_iso)
+```
+
+Notice that **grouping alone does not add the numbers**. It tells `dplyr` that rows sharing the same destination code should be treated together for subsequent calculations.
+
+### `summarise()`: calculate one row per group
+
+```{r}
+practice_2022 |>
+  group_by(coa_iso) |>
+  summarise(
+    total_refugees = sum(refugees),
+    origin_records = n(),
+    .groups = "drop"
+  )
+```
+
+Read this carefully:
+
+- `group_by(coa_iso)` defines one group for each destination code.
+- `sum(refugees)` adds the values **within** each destination group.
+- `n()` counts how many rows contributed to each group's summary.
+- `total_refugees` and `origin_records` are names we give the new columns.
+- `.groups = "drop"` removes the grouping structure from the result. It does **not** drop observations.
+
+The result has one row per **destination in 2022**, rather than one row per origin–destination pair. We have changed the **unit of observation**.
+
+### A subtle mistake: forgetting the year
+
+Consider this tempting command:
+
+```{r}
+#| eval: false
+
+# NOT an end-of-year refugee stock:
+practice_pop |>
+  group_by(coa_iso) |>
+  summarise(total = sum(refugees), .groups = "drop")
+```
+
+It adds rows from **2021 and 2022 together**. The command is syntactically valid, but its output cannot be described as the number of refugees hosted at the end of 2022. It sums different years' **stocks**, and may count the same people more than once.
+
+If we want one destination total for *each year*, we must group by **both year and destination**:
+
+```{r}
+practice_pop |>
+  group_by(year, coa_iso) |>
+  summarise(
+    total_refugees = sum(refugees),
+    .groups = "drop"
+  )
+```
+
+A key principle follows: **the variables in `group_by()` help determine what one row will mean after `summarise()`.**
+
+::: {.callout-important title="Stock data cannot be added across years as if they were flows"}
+A refugee stock is measured at a particular point in time. Adding the 2021 stock to the 2022 stock does not tell us how many different people sought refuge during those two years. Always match the aggregation to the type of measure and your question.
+:::
+
+### `mutate()` with groups: keeping the original rows
+
+Grouping can also affect `mutate()`. Here, instead of collapsing rows, we calculate each origin's **share of the destination's total within 2022**, while keeping the origin records:
+
+```{r}
+practice_2022 |>
+  group_by(coa_iso) |>
+  mutate(
+    destination_share = 100 * refugees / sum(refugees)
+  ) |>
+  ungroup() |>
+  select(coa_iso, coo_name, refugees, destination_share)
+```
+
+For each destination, the shares across the included origins sum to 100%. `ungroup()` removes grouping for later operations. Remember that this only describes the **fictional origins included in our small table**—not necessarily all people from all origins.
+
+## Applying the verbs to real UNHCR data
+
+Now let's use the same tools with `refugees::population`. The code is almost identical, but **the interpretation requires greater care**, as discussed in the previous section.
+
+### Step 1: filter a destination and year
+
+Start with Germany in 2022:
+
+```{r}
+germany_2022 <- pop |>
+  filter(year == 2022, coa_iso == "DEU")
+
+nrow(germany_2022)
+```
+
+The output tells us the number of **records** for this destination–year, not the number of refugees.
+
+To see the recorded origins and population counts:
+
+```{r}
+germany_2022 |>
+  select(coo_name, refugees, asylum_seekers) |>
+  arrange(desc(refugees)) |>
+  head(10)
+```
+
+Ask yourself: *Does the first row alone show Germany's total?* No. Each row describes a recorded origin within the selected destination–year.
+
+### Step 2: obtain a destination-year summary
+
+For a first example, we will add `refugees` across the recorded origins within each destination for 2022. We will also count how many contributing rows have missing values.
+
+```{r}
+hosts_2022 <- pop |>
+  filter(year == 2022, !is.na(coa_iso)) |>
+  group_by(coa_iso, coa_name) |>
+  summarise(
+    total_refugees = sum(refugees, na.rm = TRUE),
+    origin_records = n(),
+    missing_records = sum(is.na(refugees)),
+    .groups = "drop"
+  ) |>
+  arrange(desc(total_refugees))
+
+head(hosts_2022, 10)
+```
+
+This pipeline performs the following operations:
+
+1. Keeps 2022 and non-missing destination codes.
+2. Creates one group for each destination code–name combination.
+3. Adds refugee counts across the recorded origins within each group.
+4. Counts the origin records and how many have missing refugee values.
+5. Removes grouping and sorts the results.
+
+::: {.callout-warning title="`na.rm = TRUE` does not repair missing data"}
+`sum(refugees, na.rm = TRUE)` ignores missing numbers when adding. This is sometimes useful, but it does not tell us what those missing numbers should have been. In particular, **if every value in a group is missing, `sum(..., na.rm = TRUE)` returns 0**. Such a zero must not automatically be interpreted as a genuinely reported zero refugee population. We therefore inspect `missing_records` and should review coverage before using the table for research.
+:::
+
+We can explicitly flag groups that contain only missing refugee values:
+
+```{r}
+hosts_2022 |>
+  mutate(all_missing = missing_records == origin_records) |>
+  filter(all_missing) |>
+  select(coa_name, origin_records, missing_records)
+```
+
+If you later need a research-ready summary, you may decide to leave these totals as `NA` instead of zero. The important first step is **recognizing the problem** rather than silently treating missing reporting as an observed zero.
+
+### Step 3: create a more readable measurement
+
+```{r}
+hosts_2022 |>
+  mutate(refugees_millions = total_refugees / 1e6) |>
+  select(coa_name, refugees_millions, missing_records) |>
+  head(10)
+```
+
+`1e6` means 1,000,000. Dividing by it expresses counts in **millions of people**. It does not change who is included.
+
+### Step 4: compare two destinations
+
+```{r}
+hosts_2022 |>
+  filter(coa_iso %in% c("DEU", "FRA")) |>
+  select(coa_name, total_refugees, missing_records)
+```
+
+This compares **recorded refugee stock counts**, not recognition probabilities or the number of asylum applications filed in 2022. If you want to compare countries relative to their population size, you would need an additional dataset with an appropriate population denominator.
+
+### Step 5: understand a percentage and its denominator
+
+What fraction of the **included destination totals** does each destination represent? One approach is:
+
+```{r}
+hosts_2022 |>
+  mutate(
+    share_of_included_total =
+      100 * total_refugees / sum(total_refugees)
+  ) |>
+  select(coa_name, total_refugees, share_of_included_total) |>
+  head(10)
+```
+
+This denominator is the sum of `total_refugees` **within the derived table**. It is not automatically a verified global total: special geographical codes, missing destination codes, reporting coverage, and category definitions may affect what is represented. If some destination totals contain missing components, the calculated shares are also based on incomplete information.
+
+::: {.callout-important title="Always name the denominator"}
+Avoid writing only “Germany's share was X%.” Write what is being divided by what: **Germany's reported refugee-category stock in 2022 divided by the sum of the reported refugee-category stocks across the destination groups included in this table.** Whether that is the most useful denominator depends on the research question.
+:::
+
+## Checking a transformed table
+
+Before calculating statistics or making graphs, pause and inspect the result. These checks are simple but can catch important mistakes.
+
+```{r}
+# How many destination-code/name groups did we create?
+nrow(hosts_2022)
+
+# Does the table contain missing totals?
+sum(is.na(hosts_2022$total_refugees))
+
+# How many groups include at least one missing origin count?
+sum(hosts_2022$missing_records > 0)
+
+# Do any destination codes appear more than once?
+anyDuplicated(hosts_2022$coa_iso)
+
+# What does the distribution of totals look like?
+summary(hosts_2022$total_refugees)
+```
+
+`anyDuplicated()` returns 0 when the vector contains no repeated value; otherwise it returns the position of the first duplicate encountered. If it is nonzero, investigate whether a destination code is associated with more than one name, or whether the grouping key needs to be reconsidered.
+
+We can check duplicates more directly using `count()`:
+
+```{r}
+hosts_2022 |>
+  count(coa_iso, name = "rows_per_code") |>
+  filter(rows_per_code > 1)
+```
+
+If this prints no rows, there are no repeated non-missing destination codes **in this derived table**. That does not prove that every record in the original data is valid or that all reporting categories are comparable.
+
+::: {.callout-note title="Code can be correct while the analysis is wrong"}
+R checks whether your instructions are valid. It does **not** know whether `coa_iso` represents the geographical units appropriate for your analysis, whether an observed number is complete, or whether summing across the rows is substantively justified. Those decisions remain the researcher's responsibility.
+:::
+
+
+## Reshaping tables: from wide to long and back again
+
+We have learned how to keep rows, create variables, and summarize groups. But data often arrive in a **shape** that is convenient for presenting a table and inconvenient for analysis. We may want to reorganize the same values without changing what they measure. This is called **reshaping** (or *pivoting*).
+
+In modern R, we generally use two functions from the `tidyr` package:
+
+| Function | What it does | What usually happens to the table? |
+|---|---|---|
+| `pivot_longer()` | Moves information from several column names into a column of values | **More rows**, fewer columns |
+| `pivot_wider()` | Moves values from a column into new column headings | **Fewer rows**, more columns |
+
+R also has a base function called `reshape()`, and you may encounter older `reshape2` code using `melt()` and `dcast()`. You should recognize the general idea, but **we will learn the modern `tidyr` functions** because they are readable and widely used in contemporary tutorials.
+
+### What do *wide* and *long* mean?
+
+Suppose we have the following **entirely fictional** numbers of annual asylum applications:
+
+```{r}
+applications_wide <- tibble::tibble(
+  destination = c("Germany", "France", "Spain"),
+  `2020` = c(120, 80, 60),
+  `2021` = c(150, 95, 75),
+  `2022` = c(180, 110, 90)
+)
+
+applications_wide
+```
+
+Each row is a **destination**, and each year's applications appear in a different column. This is a *wide* table: useful for comparing numbers side by side, but awkward if we want to plot applications against a variable called `year`.
+
+For most analyses in `dplyr` and `ggplot2`, it is easier if **each variable is a column, each observation is a row, and each cell contains one value**. Here, one observation is a **destination–year**, so we want `destination`, `year`, and `applications` as three separate columns.
+
+### `pivot_longer()`: turn year columns into observations
+
+```{r}
+applications_long <- applications_wide |>
+  pivot_longer(
+    cols = c(`2020`, `2021`, `2022`),
+    names_to = "year",
+    values_to = "applications",
+    names_transform = list(year = as.integer)
+  )
+
+applications_long
+```
+
+Read the arguments one at a time:
+
+- `cols` identifies the columns we want to reshape (the three year columns).
+- `names_to = "year"` creates a new column containing the **former column headings**.
+- `values_to = "applications"` puts the **numbers from those columns** into a single column.
+- `names_transform = list(year = as.integer)` converts the year labels into numbers; otherwise they would be stored as text.
+
+We started with **three rows (destinations)** and ended with **nine rows (destination–years)**. We have **not** created more applications or changed any totals; we have only changed their arrangement.
+
+::: {.callout-tip title="Predict before you run"}
+Before executing `pivot_longer()`, ask yourself: *What is one row now? Which column will contain the year? Where will the application counts go?*
+:::
+
+### `pivot_wider()`: return to the wide format
+
+If we want a presentation table with one row per destination and separate columns for each year, we can reverse the operation:
+
+```{r}
+applications_wide_again <- applications_long |>
+  pivot_wider(
+    names_from = year,
+    values_from = applications
+  )
+
+applications_wide_again
+```
+
+Here `names_from` says which variable should become the **new column headings**, while `values_from` says which numbers to put into those columns. With the unique destination–year combinations in this example, the resulting table contains the same application counts as the original wide table.
+
+### Reshape real UNHCR data after aggregating
+
+The `refugees::population` dataset is already mostly in a **long** format: the year appears in a `year` column, not in one column per year. But remember that a destination–year may contain many origin records. **We must aggregate over origins before making a destination-by-year comparison.**
+
+The following code produces a small destination–year table for Germany, France, and Spain in 2020–2022:
+
+```{r}
+host_stocks_long <- pop |>
+  filter(
+    year %in% 2020:2022,
+    coa_iso %in% c("DEU", "FRA", "ESP")
+  ) |>
+  group_by(coa_iso, year) |>
+  summarise(
+    refugee_stock = sum(refugees, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(coa_iso, year)
+
+host_stocks_long
+```
+
+**What does one row represent?** One destination code and one year. `refugee_stock` sums the reported `refugees` category over the included origins for that destination and year. It is an end-of-year **stock**, not the number of arrivals or applications during that year.
+
+Now make the table wider:
+
+```{r}
+host_stocks_wide <- host_stocks_long |>
+  pivot_wider(
+    names_from = year,
+    values_from = refugee_stock,
+    names_prefix = "year_"
+  )
+
+host_stocks_wide
+```
+
+The columns `year_2020`, `year_2021`, and `year_2022` now show the recorded end-of-year stocks side by side. We can use this table to **compare years**, but we must **not add its three columns and call the result a refugee population**: that would sum stocks across years.
+
+To return to a long table:
+
+```{r}
+host_stocks_long_again <- host_stocks_wide |>
+  pivot_longer(
+    cols = starts_with("year_"),
+    names_to = "year",
+    names_prefix = "year_",
+    names_transform = list(year = as.integer),
+    values_to = "refugee_stock"
+  ) |>
+  arrange(coa_iso, year)
+
+host_stocks_long_again
+```
+
+### Two checks before pivoting
+
+**First: is each destination–year unique?** If a table contains several rows with the same combination of identifying variables, `pivot_wider()` may not know which number belongs in the cell. That is why we used `group_by()` and `summarise()` **before** reshaping the UNHCR table.
+
+```{r}
+host_stocks_long |>
+  count(coa_iso, year) |>
+  filter(n > 1)
+```
+
+No returned rows means there are no duplicate destination–year keys **in this constructed table**. It does not by itself verify the underlying reported statistics.
+
+**Second: does a missing cell mean zero?** No. If a destination–year is absent from the long table, `pivot_wider()` can show `NA` for that combination. Do not automatically replace `NA` with zero. Equally, note that `sum(refugees, na.rm = TRUE)` returns zero if *all* contributing values are missing, so a real analysis should explicitly inspect completeness before interpreting the totals.
+
+::: {.callout-important title="Reshaping is not the same as aggregating"}
+- `pivot_longer()` and `pivot_wider()` change **how values are arranged**.
+- `group_by()` and `summarise()` can change **which values are combined** and the unit of analysis.
+
+A correct-looking wide table can still contain the wrong figures if you have not first decided what a row and a group should represent.
+:::
+
+## Write code that you and your colleagues can read
+
+Good code style is part of reproducibility. Research scripts are easier to understand, correct, and share when they follow a consistent layout. The conventions below follow the general principles of [*R for Data Science*: Workflow—Code style](https://r4ds.hadley.nz/workflow-style.html).
+
+### Use meaningful object names
+
+Prefer descriptive names with lowercase letters and underscores:
+
+```{r}
+#| eval: false
+
+# Easier to understand:
+refugee_hosts_2022 <- pop |>
+  filter(year == 2022)
+
+# Harder to understand later:
+a <- pop |>
+  filter(year == 2022)
+```
+
+A name such as `refugee_hosts_2022` should still accurately reflect what the object contains: the example immediately above is only filtered origin–destination records, so a more precise name would be `population_records_2022` until it has been aggregated. **Good naming is about meaning, not merely length.**
+
+### Use spaces and indent pipelines
+
+```{r}
+#| eval: false
+
+# Prefer this readable form:
+population_records_2022 <- pop |>
+  filter(year == 2022) |>
+  select(coa_iso, coo_name, refugees) |>
+  arrange(desc(refugees))
+
+# Avoid compressing everything onto one line:
+# population_records_2022<-pop|>filter(year==2022)|>select(coa_iso,coo_name,refugees)|>arrange(desc(refugees))
+```
+
+Place spaces around `<-`, `==`, and arithmetic operators; add a space after commas; place `|>` at the end of a line; and indent the next step by two spaces. Write comments that explain **why** an operation is being performed, not only what the function name already says.
+
+### Break complicated operations into meaningful steps
+
+Long pipelines are not always better. You can save an intermediate object and inspect it before continuing:
+
+```{r}
+population_records_2022 <- pop |>
+  filter(year == 2022)
+
+population_records_2022 |>
+  count(coa_iso, sort = TRUE) |>
+  head(6)
+```
+
+If the result is surprising, it is easier to identify which step caused the problem. A transparent script lets another researcher follow the reasoning as well as the commands.
+
+### Organize scripts into short sections
+
+A useful research script might be organized as follows:
+
+```{r}
+#| eval: false
+
+# 1. Load packages ---------------------------------------------------------
+library(refugees)
+library(dplyr)
+
+# 2. Load data -------------------------------------------------------------
+pop <- refugees::population
+
+# 3. Select observations ---------------------------------------------------
+population_records_2022 <- pop |>
+  filter(year == 2022)
+
+# 4. Build indicators ------------------------------------------------------
+# Explain what is included before computing country totals.
+
+# 5. Check results ---------------------------------------------------------
+# Document missing values and unusual reporting categories.
+```
+
+This chapter does not require a particular script template, but adopting a consistent style early will make your later analyses more understandable.
+
+## Worked case study: from origins to destinations
+
+Let's combine the operations we have learned. **Research question:** What is the recorded end-of-year `refugees` stock for each included destination in 2022, aggregated across reported origins?
+
+```{r}
+destination_summary_2022 <- pop |>
+  # Restrict the time period and keep identifiable destination codes.
+  filter(year == 2022, !is.na(coa_iso)) |>
+  # Each summary should represent one destination code and label.
+  group_by(coa_iso, coa_name) |>
+  summarise(
+    refugee_stock = sum(refugees, na.rm = TRUE),
+    n_origin_records = n(),
+    n_missing_records = sum(is.na(refugees)),
+    .groups = "drop"
+  ) |>
+  # Make the size and potential incompleteness easy to inspect.
+  mutate(refugees_millions = refugee_stock / 1e6) |>
+  arrange(desc(refugee_stock))
+
+destination_summary_2022 |>
+  select(coa_name, refugees_millions, n_origin_records, n_missing_records) |>
+  head(10)
+```
+
+**How should we describe this table?** Each row summarizes one included destination code–name group in 2022. The measure is the sum of the `refugees` category across recorded origins, **not** all categories of forcibly displaced people. The reported figures may require additional checks for missing values, unusual reporting units, and comparability before publication.
+
+A good final step is to write the measurement in plain language **before** moving to visualization or regression. This helps reveal whether the code answers the question we actually meant to ask.
+
+## Exercises: predict → run → explain
+
+Work through the exercises in order. For each one, first **predict** what will change (rows, columns, row order, or aggregation), then **run** the code, and finally **explain the result** in one or two sentences.
+
+### A. Learn the verbs with the fictional table
+
+1. Filter `practice_pop` to 2022. How many rows remain? Now keep only Germany. How many remain?
+2. Use `arrange()` to order 2022 records from largest to smallest `refugees` value. Does the number of rows change?
+3. Use `select()` to keep only `coo_name` and `refugees`. What happened to the year and destination columns?
+4. Create a new column called `stock_hundreds` by dividing `refugees` by 100. Does `mutate()` change the number of rows?
+5. Use `distinct()` to list the destination codes. Why is this not a table of destination refugee totals?
+6. Calculate one refugee total for each destination in 2022. Why must you filter the year before grouping by destination?
+
+### B. Work with the real UNHCR table
+
+7. Change the first real-data pipeline to display the `asylum_seekers` **stock** rather than the `refugees` stock. Does this variable represent new applications filed in 2022?
+8. Filter on `coo_iso == "AFG"` and `year == 2022`, then arrange destinations by the recorded `refugees` count. What does one row now represent?
+9. Create an object called `origins_2022` with one row per origin code–name combination, aggregating recorded `refugees` counts across destinations. What question does this answer, and how is it different from a destination total?
+10. Using `hosts_2022`, create a variable representing each included destination's percentage of the sum of included totals. State the denominator precisely and identify at least two possible limitations.
+11. Check whether grouping by `coa_name` alone, instead of `coa_iso` and `coa_name`, could create problems when labels change or when the same name is used inconsistently.
+12. Use `missing_records` to find destination groups with at least one missing contributing record. Why could replacing all missing values with zero be misleading?
+
+### C. Read, debug, and improve code
+
+13. Explain the difference between `filter(year == 2022)` and `mutate(year = 2022)`. Why would confusing the two be a serious mistake?
+14. Rewrite this poorly formatted pipeline using a descriptive name, spaces, and line breaks:
+
+    ```{r}
+    #| eval: false
+    x<-pop|>filter(year==2022,coa_iso=="ESP")|>select(coo_name,refugees)|>arrange(desc(refugees))
+    ```
+
+15. A colleague sums `refugees` for Germany across all years and calls the result “the number of refugees hosted in Germany.” Explain what is wrong, even if the R code runs without an error.
+
+### D. Practice reshaping data
+
+16. In `applications_wide`, what does one row represent? After running `pivot_longer()`, what does one row represent? How many rows do you expect in each version?
+17. Use `pivot_wider()` to transform `applications_long` back to its original layout. Have any application counts changed?
+18. Create `host_stocks_wide` for the three countries in the example, with years as columns. Explain why **adding** the 2020, 2021, and 2022 columns would not measure a country's refugee population.
+19. Change the real-data example to select the origin codes `"AFG"` and `"SYR"` and obtain one row per **origin–year**, aggregated over recorded destinations. Pivot the result to wide format. What population and geography does each cell now represent?
+20. Imagine a destination has no reported row for 2021. What might happen when you pivot the data wider? Why would replacing a resulting `NA` by zero be a potentially misleading choice?
+
+::: {.callout-tip title="Take-home check"}
+You understand this chapter when you can look at a pipeline and explain **what each step does**, **what one row represents at the end**, and **which population, year, and denominator the result describes**. Correct syntax is important; correct interpretation is just as important.
+:::
+
+::: {.callout-note title="Further reading"}
+- [R for Data Science (2e): Data transformation](https://r4ds.hadley.nz/data-transform.html)
+- [R for Data Science (2e): Workflow—Code style](https://r4ds.hadley.nz/workflow-style.html)
+- [R for Data Science (2e): Data tidying](https://r4ds.hadley.nz/data-tidy.html)
+- [`tidyr` reference for `pivot_longer()`](https://tidyr.tidyverse.org/reference/pivot_longer.html) and [`pivot_wider()`](https://tidyr.tidyverse.org/reference/pivot_wider.html)
+- [`dplyr` documentation](https://dplyr.tidyverse.org/)
+- [`refugees` package and data documentation](https://populationstatistics.github.io/refugees/)
+:::

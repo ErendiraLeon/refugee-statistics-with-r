@@ -1,0 +1,369 @@
+---
+title: "Selected solutions and explanations"
+subtitle: "Check your reasoning after trying the exercises"
+number-sections: false
+---
+
+These are **optional, selected worked examples**, not an answer to every question or an assessment rubric. Each panel corresponds to a named section of the learning materials. Try the question independently before opening the panel.
+
+Most examples use the `refugees` package, whose contents may change between releases. **Run the code on your installed data rather than treating any numerical result in an older version as permanent.** In particular, check reporting categories and missing values before interpreting a country total.
+
+The examples below presume that the packages required for the relevant exercises have been installed. To run several examples together in a fresh R session, first load:
+
+```{r}
+library(refugees)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(readr)
+```
+
+::: {.callout-tip collapse="true" title="Getting started · Installing versus loading, scripts, and projects"}
+
+- `install.packages("dplyr")` downloads and installs a package in your R library; you generally do this only when setting up or updating the package.
+- `library(dplyr)` makes an installed package's functions directly available **in the current R session**.
+- The **Console** executes instructions immediately; a saved **script** records the steps you want to rerun.
+- An **RStudio project** keeps scripts and data together so you can use relative paths, such as `data/file.csv`.
+
+After restarting R, a reproducible script should load its packages and create its objects anew. A variable that existed only in the previous session's Environment cannot be assumed to exist again.
+
+```{r}
+#| eval: false
+# Run this in the Console when you need to inspect the setup
+sessionInfo()
+```
+
+:::
+
+::: {.callout-tip collapse="true" title="First steps in R · Objects, vectors, functions, and missing values"}
+
+```{r}
+recognitions <- c(8, 11, 3, 15, 9)
+
+c(total = sum(recognitions),
+  minimum = min(recognitions),
+  maximum = max(recognitions),
+  median = median(recognitions))
+
+recognitions[3] <- NA
+mean(recognitions)                # NA: an input is missing
+mean(recognitions, na.rm = TRUE) # Mean of the four observed values
+sum(is.na(recognitions))         # Number of missing entries
+```
+
+An **object** has a name, such as `recognitions`; the **vector** is the sequence of values stored in that object. A function such as `mean()` receives an **argument**. `na.rm = TRUE` changes how missing values are handled, not the original data. If the missing observations are systematically different, the calculated mean may be misleading.
+
+`applications[1]` selects by **position**, while `applications[applications > 15]` selects by a **condition**. `=` inside a function call names an argument; `<-` assigns an object; `==` tests equality.
+
+:::
+
+::: {.callout-tip collapse="true" title="Meet the UNHCR data · Origin, destination, and unit of observation"}
+
+- `coo_name` and `coo_iso` identify **origin**; `coa_name` and `coa_iso` identify **country of asylum/destination**.
+- The `refugees` variable in `population` is an **end-of-year stock** in that category. `asylum_seekers` is another stock, **not** the number of applications filed during that year.
+- The population table commonly contains several **origin–destination–year** records for the same destination. A destination total must be carefully aggregated over included origins.
+- In `asylum_decisions`, `dec_rejected` counts recorded rejections and `dec_other` refers to other protection outcomes. Their interpretation still depends on procedure, stage, and cases-versus-persons coding.
+
+```{r}
+refugees::population |>
+  filter(year == 2022, coa_iso == "ESP") |>
+  select(year, coo_name, coa_name, refugees, asylum_seekers) |>
+  head(5)
+```
+
+This shows **five records**, not five people, and not necessarily the five most important origins.
+
+:::
+
+::: {.callout-tip collapse="true" title="Data transformation · Aggregating origins rather than destinations"}
+
+To answer *How many refugees from each origin were reported across included destinations in 2022?*, group by **origin**, not by destination:
+
+```{r}
+origins_2022 <- refugees::population |>
+  filter(year == 2022, !is.na(coo_iso)) |>
+  group_by(coo_iso, coo_name) |>
+  summarise(
+    n_missing = sum(is.na(refugees)),
+    refugee_stock = if (all(is.na(refugees))) NA_real_ else
+      sum(refugees, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  arrange(desc(refugee_stock))
+
+head(origins_2022)
+```
+
+This sums **reported external stocks** for an origin across included destinations. It is **not** a measure of the internally displaced population in that origin country. An all-missing group stays missing rather than being silently converted to zero; partially missing groups still require caution.
+
+:::
+
+::: {.callout-tip collapse="true" title="Data transformation · Wide and long formats"}
+
+A **wide** table might have `destination`, `2020`, `2021`, `2022` as columns. After `pivot_longer()`, one row represents a **destination–year**, with the year stored in a variable.
+
+```{r}
+example_wide <- tibble(
+  destination = c("Germany", "Spain"),
+  `2020` = c(100, 50),
+  `2021` = c(120, 75)
+)
+
+example_long <- example_wide |>
+  pivot_longer(
+    cols = c(`2020`, `2021`),
+    names_to = "year",
+    values_to = "applications",
+    names_transform = list(year = as.integer)
+  )
+
+example_wide_again <- example_long |>
+  pivot_wider(names_from = year, values_from = applications)
+
+example_long
+example_wide_again
+```
+
+Reshaping **rearranges** values; it does not add application records. With a real UNHCR population table, aggregate origin-specific rows to a unique destination–year **before** pivoting to one year per column. Adding annual stock columns would incorrectly sum stocks measured at different dates.
+
+:::
+
+::: {.callout-tip collapse="true" title="Descriptive statistics · Means, medians, skewness, and shares"}
+
+```{r}
+origins <- read_csv("data/unhcr_origin_top10_2022.csv", show_col_types = FALSE)
+x <- origins$refugees_plus_oip / 1e6
+
+c(mean = mean(x), median = median(x), sd = sd(x),
+  minimum = min(x), maximum = max(x), IQR = IQR(x))
+
+origins |>
+  filter(refugees_plus_oip > mean(refugees_plus_oip)) |>
+  select(origin, refugees_plus_oip)
+```
+
+These summaries describe only the **selected ten origins**, not the typical origin worldwide. A long right tail tends to pull the mean upward relative to the median, but the shape is best checked using a distribution plot.
+
+For the destination top-five share, the denominator is the sum of **all included destination totals in the derived table**, not the world's annual asylum applications. If all contributing origin counts are missing for a destination, do not recode that destination to zero without explanation.
+
+:::
+
+::: {.callout-tip collapse="true" title="Visualization · Bar charts, distributions, and skewness"}
+
+```{r}
+hosts_2022 <- refugees::population |>
+  filter(year == 2022, !is.na(coa_iso)) |>
+  group_by(coa_iso, coa_name) |>
+  summarise(
+    missing_origins = sum(is.na(refugees)),
+    refugee_stock = if (all(is.na(refugees))) NA_real_ else
+      sum(refugees, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+top10 <- hosts_2022 |>
+  filter(!is.na(refugee_stock)) |>
+  slice_max(order_by = refugee_stock, n = 10, with_ties = FALSE)
+
+ggplot(top10,
+       aes(x = refugee_stock / 1e6,
+           y = reorder(coa_name, refugee_stock))) +
+  geom_col(fill = "#2475a6") +
+  labs(x = "Reported refugee stock (millions)", y = NULL,
+       title = "Largest recorded destination totals in 2022",
+       caption = "Source: refugees::population; special reporting categories and missingness require review") +
+  theme_minimal()
+```
+
+`geom_col()` displays **already calculated numerical totals**. `geom_bar()` instead counts the **number of rows** by default. A histogram of `hosts_2022$refugee_stock` counts **destinations per bin**, not refugees per bin. The boxplot's distant observations are not automatically errors.
+
+A right-skewed distribution has a longer **right-hand tail**. A log scale can make strongly unequal positive values easier to compare, but requires stating which zeros/missing values were excluded.
+
+:::
+
+::: {.callout-tip collapse="true" title="Time trends · Absolute change, percentage change, and indices"}
+
+Take a fictional end-of-year stock of 100,000 in 2015, 120,000 in 2016 and 90,000 in 2017:
+
+| Year | Stock | Change from previous year | Percentage change from previous year | Index (2015 = 100) |
+|---|---:|---:|---:|---:|
+| 2015 | 100,000 | — | — | 100 |
+| 2016 | 120,000 | +20,000 | +20% | 120 |
+| 2017 | 90,000 | −30,000 | −25% | 90 |
+
+The index of **90** in 2017 means the stock is **10% below 2015**, not that it fell by 10% from 2016.
+
+```{r}
+stock_example <- tibble(year = 2015:2017, stock = c(100000, 120000, 90000)) |>
+  arrange(year) |>
+  mutate(
+    previous_year = lag(year),
+    previous_stock = lag(stock),
+    absolute_change = if_else(year - previous_year == 1,
+                              stock - previous_stock, NA_real_),
+    pct_change = if_else(year - previous_year == 1 & previous_stock > 0,
+                         100 * (stock / previous_stock - 1), NA_real_),
+    index_2015 = 100 * stock / first(stock)
+  )
+
+stock_example
+```
+
+For real country data, sort and calculate `lag()` **within each country**, and check that consecutive rows are consecutive years. Differences in recorded stocks are **not counts of new arrivals**.
+
+:::
+
+::: {.callout-tip collapse="true" title="Applications and decisions · Choosing the substantive denominator"}
+
+```{r}
+toy <- read_csv("data/toy_asylum_decisions.csv", show_col_types = FALSE)
+
+toy_rates <- toy |>
+  mutate(
+    substantive = recognized + other_protection + rejected,
+    recognition_pct = if_else(substantive > 0,
+      100 * recognized / substantive, NA_real_),
+    protection_pct = if_else(substantive > 0,
+      100 * (recognized + other_protection) / substantive, NA_real_),
+    closed_in_denominator = if_else(substantive + closed > 0,
+      100 * (recognized + other_protection) / (substantive + closed), NA_real_)
+  ) |>
+  select(country, substantive, recognition_pct,
+         protection_pct, closed_in_denominator)
+
+toy_rates
+```
+
+For the **fictional Albia** values specified in the exercise (45 recognized, 15 other protection, 40 rejected), the recognition rate is **45%** and total protection rate is **60%**. Including `closed` changes the quantity being measured. Do not compare those toy rates with real country performance.
+
+A share among this year's substantive decisions is **not** an applicant's lifetime probability of recognition: decisions made this year need not concern applications made this year.
+
+:::
+
+::: {.callout-tip collapse="true" title="Joins · Matches, duplicate keys, and reporting coverage"}
+
+**Do not** sum all applications across procedural types and reporting units and present the result as a country-level asylum indicator. The join exercise instead asks where **records are available**.
+
+```{r}
+# Recreate the destination table here so this example can run independently.
+hosts_2022 <- refugees::population |>
+  filter(year == 2022, !is.na(coa_iso)) |>
+  group_by(coa_iso, coa_name) |>
+  summarise(refugee_stock = if (all(is.na(refugees))) NA_real_ else
+              sum(refugees, na.rm = TRUE), .groups = "drop")
+
+app_coverage <- refugees::asylum_applications |>
+  filter(year == 2022, !is.na(coa_iso), !is.na(applied)) |>
+  group_by(coa_iso) |>
+  summarise(n_application_rows = n(), .groups = "drop")
+
+# A destination code must be unique in both tables for a one-to-one join.
+hosts_2022 |>
+  count(coa_iso) |>
+  filter(n > 1)
+
+app_coverage |>
+  count(coa_iso) |>
+  filter(n > 1)
+
+matched <- hosts_2022 |>
+  left_join(app_coverage, by = "coa_iso")
+
+sum(is.na(matched$n_application_rows))
+
+hosts_2022 |>
+  anti_join(app_coverage, by = "coa_iso") |>
+  select(coa_iso, coa_name)
+```
+
+If the first uniqueness check finds repeated destination codes, inspect the code/name definitions and fix the destination key **before** interpreting the joined result. A missing match means no matching reporting row under these filters, **not** necessarily zero applications. For a multi-year join, use both `coa_iso` **and** `year`.
+
+:::
+
+::: {.callout-tip collapse="true" title="Regression · Reading and checking an OLS result"}
+
+The inference exercises use **160 invented jurisdictions** with `staff_per_100`, `complexity`, `resources`, and `processing_months` (as defined in [Inference](09-inference.qmd)). Run the data-generation block there first. Then:
+
+```{r}
+#| eval: false
+m_simple <- lm(processing_months ~ staff_per_100, data = jurisdictions)
+m_adjusted <- lm(processing_months ~ staff_per_100 + complexity + resources,
+                 data = jurisdictions)
+
+summary(m_simple)
+coef(m_simple)
+confint(m_simple)
+
+# Reproduce the simple-model slope from covariance / variance
+cov(jurisdictions$staff_per_100,
+    jurisdictions$processing_months) / var(jurisdictions$staff_per_100)
+
+# Extract the estimate, standard error, p-value and 95% interval
+broom::tidy(m_adjusted, conf.int = TRUE)
+```
+
+**The coefficient's units are months per one additional staff member per 100 pending cases.** `summary()` also displays standard errors, test statistics, p-values, and $R^2$. A 95% confidence interval expresses uncertainty **under assumptions of the statistical procedure**; it is not a 95% probability that a fixed true coefficient lies in this particular interval. Changes between model specifications do not automatically identify a causal effect.
+
+:::
+
+::: {.callout-tip collapse="true" title="Logistic regression · Log-odds, odds ratios, and predicted probabilities"}
+
+Use the **fictional claims dataset** generated in [Inference](09-inference.qmd), or the optional lab. Run its generation block before using the following code:
+
+```{r}
+#| eval: false
+logit_model <- glm(
+  recognized ~ represented + evidence_index + origin_group,
+  data = claims,
+  family = binomial(link = "logit")
+)
+
+# Log-odds coefficients
+coef(logit_model)
+
+# Exponentiate to obtain odds ratios
+exp(coef(logit_model))
+
+# Odds ratios and 95% confidence intervals
+broom::tidy(logit_model, conf.int = TRUE, exponentiate = TRUE)
+
+# Two otherwise identical profiles, differing in representation
+profiles <- data.frame(
+  represented = c(0, 1),
+  evidence_index = c(0, 0),
+  origin_group = factor(c("A", "A"), levels = levels(claims$origin_group))
+)
+profiles$probability <- predict(logit_model,
+                                newdata = profiles, type = "response")
+100 * diff(profiles$probability)  # Difference in percentage points
+```
+
+A logistic coefficient is a difference in **log-odds**, and `exp(coefficient)` is an **odds ratio**. An odds ratio of 2 does **not** imply twice the probability or a 100-percentage-point difference. Predicted probabilities depend on the covariate profile.
+
+:::
+
+::: {.callout-tip collapse="true" title="Regression tables · Exporting and labeling model output"}
+
+Once `m_simple` and `m_adjusted` exist, you can compare them in a publication-style table. The example below is **optional**, since it requires `stargazer` to be installed.
+
+```{r}
+#| eval: false
+stargazer::stargazer(
+  m_simple, m_adjusted,
+  type = "text", digits = 3,
+  column.labels = c("Simple", "Adjusted")
+)
+
+modelsummary::modelsummary(
+  list("Simple" = m_simple, "Adjusted" = m_adjusted),
+  output = "outputs/ols-models.html"
+)
+```
+
+A responsible table identifies the outcome, coefficient units, observations, controls, uncertainty measure (for example **standard errors in parentheses**), and whether estimates are descriptive. For logistic models, explicitly say whether entries show **log-odds coefficients** or **odds ratios**.
+
+:::
+
+## Before using an answer in your own analysis
+
+A correct command and a plausible number do not by themselves produce a valid research claim. State the **data source, unit of observation, year, population category, procedural coverage, missing-data treatment, numerator and denominator (if applicable)**. For regression, also identify the model specification and uncertainty assumptions. These worked examples are intended for practice and do not constitute UNHCR or RefLex research findings.

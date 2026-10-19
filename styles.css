@@ -1,0 +1,14 @@
+:root { --brand:#125b81; --soft:#f2f7fa; --ink:#202b36; }
+body { color:var(--ink); }
+#title-block-header .title { letter-spacing:-.025em; font-weight:750; }
+#title-block-header .subtitle { font-weight:400; color:#466176; }
+.sidebar-title { font-weight:750; }
+.callout { border-radius:8px; }
+.quarto-title-meta-heading { font-weight:650; }
+.author-card { border:1px solid #dbe7ee; background:var(--soft); border-radius:11px; padding:1rem 1.15rem; margin:1rem 0 1.6rem; }
+.author-card strong { color:#144e70; }
+.exercise { border-left:4px solid #24806d; background:#f3faf7; padding:.9rem 1.15rem; margin:1.3rem 0; border-radius:0 8px 8px 0; }
+.learning-targets { background:#f2f7fa; border-left:4px solid #125b81; padding:.7rem 1rem; margin:1rem 0; }
+.figure-note { color:#596d7b; font-size:.92rem; }
+#quarto-content { line-height:1.65; }
+pre { border-radius:8px; }

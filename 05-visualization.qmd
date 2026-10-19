@@ -1,0 +1,735 @@
+---
+title: "Make graphs that explain rather than decorate"
+subtitle: "The grammar of graphics, exploratory data analysis, skewness and responsible interpretation"
+---
+
+::: {.callout-note title="Learning goals"}
+Build a plot one layer at a time using `ggplot2`; distinguish mappings from visual settings; choose an appropriate graph for the type of variable and research question; interpret skewness, centre, spread, unusual values, and relationships; use facets and transformations carefully; write figures that are reproducible and substantively honest.
+:::
+
+## Why make graphs? Exploratory data analysis
+
+A mean, a median, and a standard deviation summarize a dataset, but they cannot show its full shape. Two datasets can have similar averages and quite different distributions. A graph can reveal **clusters, gaps, skewness, extreme observations, and relationships between variables** that a table of statistics might hide.
+
+This process is called **exploratory data analysis (EDA)**. The point is not simply to decorate a report. We start with a question, look at the data, notice patterns or anomalies, and use what we learn to ask better questions.
+
+For example, rather than immediately claiming that the “average destination hosts X refugees,” we might ask:
+
+- Are most destination totals small, with a few exceptionally large values?
+- Does the mean give a misleading impression of a typical destination?
+- Do two years show different distributions?
+- Is an apparently unusual number a genuine observation or a reporting problem?
+
+
+::: {.callout-important title="A figure is an argument about data"}
+Before choosing a graph, ask: **What does one row represent? What variable is being plotted? Who is included? Which year? Which unit?** A visually attractive graph can still support an invalid comparison.
+:::
+
+## Get ready: packages and two datasets
+
+The first example uses a **fixed set of ten selected origin countries** from the UNHCR `refugees` package documentation. Later, we will create a destination-level table from the population data, as in the descriptive statistics section.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(tidyr)
+library(refugees)
+
+origins <- read_csv(
+  "data/unhcr_origin_top10_2022.csv",
+  show_col_types = FALSE
+)
+
+origins <- origins |>
+  mutate(millions = refugees_plus_oip / 1e6)
+
+head(origins)
+```
+
+The ten-origin table combines **refugees and other people in need of international protection**. It is a *selected example*, not a full distribution of every origin in the world.
+
+For our second dataset, we aggregate origin-specific rows to one row per **destination entity in 2022**:
+
+```{r}
+hosts <- refugees::population |>
+  filter(year == 2022, !is.na(coa_iso), coa_iso != "") |>
+  group_by(coa_iso, coa_name) |>
+  summarise(
+    refugee_stock = if (all(is.na(refugees))) {
+      NA_real_
+    } else {
+      sum(refugees, na.rm = TRUE)
+    },
+    asylum_seeker_stock = if (all(is.na(asylum_seekers))) {
+      NA_real_
+    } else {
+      sum(asylum_seekers, na.rm = TRUE)
+    },
+    missing_refugee_cells = sum(is.na(refugees)),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(refugee_stock))
+
+hosts |>
+  select(coa_name, refugee_stock, missing_refugee_cells) |>
+  head(6)
+```
+
+The `refugee_stock` and `asylum_seeker_stock` variables refer to **population stocks**, not applications lodged that year. The sums can still be incomplete when some origin cells are missing, and some reporting entities are not sovereign countries. We use this table to **learn plotting techniques**, not to publish an audited global ranking.
+
+## Meet ggplot2: building a graph layer by layer
+
+The package `ggplot2` follows a **grammar of graphics**. Rather than asking for one finished chart, we build a graph in a series of parts.
+
+A useful mental model is:
+
+1. **Data:** which table contains the observations?
+2. **Aesthetic mapping:** which variable controls the x-position, y-position, colour, or another visual feature?
+3. **Geometry (`geom`):** how are the observations represented—bars, points, lines, boxes?
+4. **Scales and coordinates:** how are values translated into visual distances and tick marks?
+5. **Labels and theme:** what must the reader know to interpret the figure?
+
+Unlike `dplyr`, which uses `|>` to pass tables from one function to the next, **ggplot2 builds graphs by adding layers with `+`**.
+
+### Build a graph in stages
+
+First, specify only the data and the variables:
+
+```{r}
+#| label: fig-first-ggplot
+#| fig-cap: "A ggplot canvas with aesthetic mappings but no geometry yet."
+
+ggplot(
+  origins,
+  aes(x = millions, y = reorder(origin, millions))
+)
+```
+
+Nothing has been drawn yet: there is a coordinate system, but **no geom**. Now add bars:
+
+```{r}
+#| label: fig-first-bars
+#| fig-cap: "The ten selected origin countries in the package's 2022 example, ranked by refugees plus other people in need of international protection."
+
+ggplot(origins, aes(x = millions, y = reorder(origin, millions))) +
+  geom_col(fill = "#2475a6")
+```
+
+`geom_col()` draws one bar for each row, using the value of `millions` as the bar's length. `reorder()` arranges the origin labels by their numeric values rather than alphabetically.
+
+Finally, add titles, units, and a cleaner appearance:
+
+```{r}
+#| label: fig-origins-bars
+#| fig-cap: "Selected origin countries in the documented 2022 example; the measure combines two UNHCR population categories."
+
+p_origins <- ggplot(
+  origins,
+  aes(x = millions, y = reorder(origin, millions))
+) +
+  geom_col(fill = "#2475a6") +
+  labs(
+    title = "Ten selected origins in the 2022 example",
+    subtitle = "Refugees + other people in need of international protection",
+    x = "People (millions)",
+    y = NULL,
+    caption = "Source: refugees package documentation; ten selected origins"
+  ) +
+  theme_minimal(base_size = 12)
+
+p_origins
+```
+
+**Read it in plain language:** “Use `origins`; put millions on the horizontal axis and origin names on the vertical axis; draw bars; add substantive labels; apply a simple theme.”
+
+::: {.callout-tip title="Why save a plot in an object?"}
+Writing `p_origins <- ggplot(...) + ...` stores a plot as an R object. Printing `p_origins` displays it; later we can build on it with `p_origins + ...` without rewriting the whole command.
+:::
+
+## Aesthetic mapping versus visual settings
+
+This is a classic source of confusion. Inside `aes()`, we usually say **which data variable determines a visual property**. Outside `aes()`, we usually set that property to a **fixed appearance**.
+
+For example, all bars can be blue:
+
+```{r}
+ggplot(origins, aes(x = millions, y = reorder(origin, millions))) +
+  geom_col(fill = "steelblue") +
+  theme_minimal()
+```
+
+Or their colour can convey extra information:
+
+```{r}
+#| label: fig-aesthetic-mapping
+#| fig-cap: "An aesthetic mapping lets the data control bar fill, creating a legend. The two groups here use an illustrative threshold."
+
+origins_with_group <- origins |>
+  mutate(
+    size_group = if_else(
+      millions >= 2,
+      "At least 2 million",
+      "Below 2 million"
+    )
+  )
+
+ggplot(
+  origins_with_group,
+  aes(x = millions, y = reorder(origin, millions), fill = size_group)
+) +
+  geom_col() +
+  labs(x = "People (millions)", y = NULL, fill = "Illustrative group") +
+  theme_minimal()
+```
+
+The second graph automatically creates a legend because `fill` maps to a **column**. The two-million cutoff is an arbitrary **teaching choice**, not an official UNHCR classification.
+
+::: {.callout-warning title="Avoid this common error"}
+`aes(fill = "blue")` asks ggplot2 to treat the text "blue" as a mapped **category**. To make every bar blue, write `geom_col(fill = "blue")` **outside** `aes()`.
+:::
+
+## Which geometry answers which question?
+
+| Question | Data/variables | Common geom |
+|---|---|---|
+| How many rows fall into each category? | One categorical variable | `geom_bar()` |
+| What are precomputed counts by country? | Category and numeric value | `geom_col()` |
+| How are numeric values distributed? | One numeric variable | `geom_histogram()` or `geom_density()` |
+| What are median, quartiles and unusual observations? | One numeric variable, possibly groups | `geom_boxplot()` |
+| How do two numeric variables vary together? | Two numeric variables | `geom_point()` |
+| How does one measure change over time? | Ordered time and numeric outcome | `geom_line()` (next section) |
+
+### `geom_bar()` and `geom_col()` are not interchangeable
+
+`geom_bar()` **counts rows** by default. To illustrate, divide the ten selected origins into two illustrative size categories:
+
+```{r}
+#| label: fig-bar-count
+#| fig-cap: "Number of selected origin rows in each illustrative size group—not numbers of people."
+
+ggplot(origins_with_group, aes(x = size_group)) +
+  geom_bar(fill = "#2475a6") +
+  labs(x = "Group", y = "Number of origin rows") +
+  theme_minimal()
+```
+
+This shows **how many of the ten rows** fall into each group. It does *not* plot how many refugees are represented by that group. Our earlier `geom_col()` plot did that because it used **already calculated counts** on a numeric axis.
+
+### Bars versus dots
+
+```{r}
+#| label: fig-origin-dotplot
+#| fig-cap: "Exactly the same counts displayed as dots rather than bars."
+
+ggplot(origins, aes(x = millions, y = reorder(origin, millions))) +
+  geom_point(size = 3, color = "#b05a2c") +
+  labs(x = "People (millions)", y = NULL) +
+  theme_minimal()
+```
+
+Bars emphasize magnitudes from a common zero baseline, while dots emphasize positions on the axis. Both are useful for comparing selected categories. The graph type should follow the question, not the other way around.
+
+## From comparing categories to examining distributions
+
+The next question is not “Which ten destinations are largest?” but rather **“What does the entire distribution of destination totals look like?”**
+
+A *distribution* describes how often different values appear among the observations. In our `hosts` data, each row is one included destination entity in 2022. The histogram will therefore count **destination entities**, not individual refugees.
+
+### Histograms: binning continuous quantities
+
+```{r}
+#| label: fig-host-histogram
+#| fig-cap: "Distribution of reported 2022 refugee stock totals across the included destination entities."
+
+ggplot(hosts, aes(x = refugee_stock / 1e6)) +
+  geom_histogram(bins = 25, fill = "#2475a6", color = "white") +
+  labs(
+    title = "Distribution of recorded refugee stocks",
+    subtitle = "Each observation is an included destination entity, 2022",
+    x = "Refugee stock (millions)",
+    y = "Number of destination entities",
+    caption = "UNHCR population data via the refugees R package; reported cells"
+  ) +
+  theme_minimal()
+```
+
+A histogram divides a numeric range into **bins** (intervals). Each bar's height is the number of observations that fall within that interval. Unlike a country bar chart, the horizontal axis is numeric, and neighbouring bars represent neighbouring intervals.
+
+In a right-skewed distribution, most observations are concentrated toward smaller values while a few stretch the right tail. That is a plausible shape for country-level population counts, but **we should read the actual graph before making the claim**.
+
+#### Does the choice of bins matter?
+
+```{r}
+#| label: fig-histogram-bin-comparison
+#| fig-cap: "The same data shown with three bin choices. Fine details can change with the binning."
+
+# Compare with the earlier 25-bin histogram.
+# We draw two separate figures to change the number of bins.
+
+ggplot(hosts, aes(x = refugee_stock / 1e6)) +
+  geom_histogram(bins = 10, fill = "#2475a6", color = "white") +
+  labs(title = "10 bins", x = "People (millions)", y = "Destinations") +
+  theme_minimal()
+
+ggplot(hosts, aes(x = refugee_stock / 1e6)) +
+  geom_histogram(bins = 40, fill = "#2475a6", color = "white") +
+  labs(title = "40 bins", x = "People (millions)", y = "Destinations") +
+  theme_minimal()
+```
+
+The two plots use the **same observations**. Different bin choices can make small spikes or gaps appear or disappear. A striking feature that exists only under one arbitrary choice deserves caution. (The earlier histogram used 25 bins.)
+
+### Histograms and density plots
+
+A density plot shows a **smoothed estimate** of the distribution. Its vertical axis is *density*; the area under the curve integrates to approximately one. A density value is **not a count of people** and should not be described as the number of destination entities.
+
+Since these totals can be extremely skewed, we first look at their logarithmic scale. This is a *transformation of the variable*—not a change in which observations are present.
+
+```{r}
+#| label: fig-density-log
+#| fig-cap: "Smoothed distribution of log10(refugee stock + 1) for included destination entities in 2022."
+
+hosts_log <- hosts |>
+  mutate(log10_stock_plus1 = log10(refugee_stock + 1))
+
+ggplot(hosts_log, aes(x = log10_stock_plus1)) +
+  geom_density(fill = "#89bad1", alpha = 0.45, color = "#2475a6") +
+  labs(
+    x = "log10(reported refugee stock + 1)",
+    y = "Estimated density",
+    title = "A smoothed view of the transformed distribution"
+  ) +
+  theme_minimal()
+```
+
+The `+ 1` allows a recorded zero to be transformed rather than excluded. On this scale, a change of one unit roughly corresponds to a **tenfold** change when stocks are large. The shape of a distribution can look different after transformation; this plot does **not** show raw counts on the horizontal axis.
+
+## Skewness
+
+In the descriptive statistics section, we learned that skewness concerns **asymmetry** in a distribution. The crucial rule is to look at the **tail**:
+
+- **Right (positive) skew:** a long tail toward larger values; the mean is often higher than the median.
+- **Left (negative) skew:** a long tail toward smaller values; the mean is often lower than the median.
+- **Approximate symmetry:** roughly comparable tails on both sides; mean and median may be close.
+
+For a **unimodal, familiar-shaped** distribution, the illustrative ordering is often:
+
+$$\text{Right skew: mode} < \text{median} < \text{mean}$$
+
+$$\text{Left skew: mean} < \text{median} < \text{mode}$$
+
+This ordering is **not a universal mathematical law**, and the mode is not always a well-defined single value. The following picture is **schematic**—its values are generated mathematically, not taken from UNHCR.
+
+### Three shapes, with mean and median marked
+
+```{r}
+#| label: fig-three-shapes
+#| fig-cap: "Illustrative left-skewed, symmetric and right-skewed density curves showing theoretical mean, median and mode. These are NOT UNHCR data."
+
+shapes <- tidyr::expand_grid(
+  shape = c("Left-skewed", "Symmetric", "Right-skewed"),
+  x = seq(0, 10, length.out = 401)
+) |>
+  mutate(
+    shape = factor(shape, levels = c(
+      "Left-skewed", "Symmetric", "Right-skewed"
+    )),
+    density = case_when(
+      shape == "Left-skewed" ~ dgamma(10 - x, shape = 3),
+      shape == "Symmetric" ~ dnorm(x, mean = 5, sd = 1),
+      shape == "Right-skewed" ~ dgamma(x, shape = 3)
+    )
+  )
+
+shape_centres <- tibble::tibble(
+  shape = factor(
+    c("Left-skewed", "Symmetric", "Right-skewed"),
+    levels = levels(shapes$shape)
+  ),
+  mean_value = c(7, 5, 3),
+  median_value = c(10 - qgamma(0.5, shape = 3), 5,
+                   qgamma(0.5, shape = 3)),
+  mode_value = c(8, 5, 2)
+)
+
+ggplot(shapes, aes(x = x, y = density)) +
+  geom_line(linewidth = 1, color = "#2475a6") +
+  geom_vline(
+    data = shape_centres,
+    aes(xintercept = mean_value, color = "Mean"),
+    linetype = "solid", linewidth = 0.7
+  ) +
+  geom_vline(
+    data = shape_centres,
+    aes(xintercept = median_value, color = "Median"),
+    linetype = "dashed", linewidth = 0.7
+  ) +
+  geom_vline(
+    data = shape_centres,
+    aes(xintercept = mode_value, color = "Mode"),
+    linetype = "dotted", linewidth = 0.7
+  ) +
+  facet_wrap(~ shape, nrow = 1) +
+  scale_color_manual(values = c(
+    "Mean" = "#bd5226", "Median" = "#1f6945", "Mode" = "#7652a3"
+  )) +
+  labs(x = "Illustrative value", y = "Density", color = NULL) +
+  theme_minimal(base_size = 11) +
+  theme(legend.position = "bottom")
+```
+
+In the symmetric panel, **mean, median and mode coincide**, so their three reference lines overlap. In the right-skewed panel, the **mode** is at the peak, the **median** is farther right, and the **mean** lies still farther toward the right tail. The left-skewed panel reverses this ordering. These are illustrations for these particular shapes, not universal relationships for every possible distribution.
+
+::: {.callout-tip title="A quick way to remember it"}
+**Positive/right skew → tail to the right → large observations pull the mean rightward.** Negative/left skew reverses the direction. Skewness tells us about the *shape*, not automatically about good or bad performance.
+:::
+
+### A substantive illustration: asylum-processing times
+
+Consider ten entirely **fictional** waiting times measured in days:
+
+```{r}
+waiting_times <- tibble::tibble(
+  case = seq_len(10),
+  days = c(50, 80, 100, 120, 150, 170, 190, 210, 300, 1030)
+)
+
+waiting_times |>
+  summarise(
+    mean_days = mean(days),
+    median_days = median(days),
+    minimum = min(days),
+    maximum = max(days)
+  )
+```
+
+The mean is **240 days**, but the median is **160 days**. The long final wait pushes the mean above the median. Plot the same values, marking both statistics:
+
+```{r}
+#| label: fig-waiting-times
+#| fig-cap: "Fictional waiting times: the mean of 240 days lies to the right of the median of 160 days."
+
+ggplot(waiting_times, aes(x = days)) +
+  geom_histogram(binwidth = 100, boundary = 0,
+                 fill = "#89bad1", color = "white") +
+  geom_vline(xintercept = mean(waiting_times$days),
+             color = "#bd5226", linewidth = 1) +
+  geom_vline(xintercept = median(waiting_times$days),
+             color = "#1f6945", linetype = "dashed", linewidth = 1) +
+  labs(
+    x = "Days until a decision (fictional)",
+    y = "Number of fictional cases",
+    title = "A long right tail can pull the mean above the median",
+    subtitle = "Solid orange: mean; dashed green: median"
+  ) +
+  theme_minimal()
+```
+
+**Interpretation:** This plot shows the distribution among **ten invented cases**. It does not show any country's actual processing time. In real administrative data, a long right tail might motivate further questions about pending cases, censoring, procedures, appeals, or data quality.
+
+### The numerical lesson: mean and median are not substitutes
+
+```{r}
+mean(waiting_times$days)
+median(waiting_times$days)
+sd(waiting_times$days)
+quantile(waiting_times$days, probs = c(0.25, 0.75))
+```
+
+Mean and standard deviation tend to be more influenced by large deviations. Median and interquartile range summarize the centre and middle spread more robustly. **Report the measure that fits your question**, and use the graph to understand what your summary numbers conceal.
+
+### Mean and median on the real destination distribution
+
+We can also annotate the **real UNHCR-derived distribution**, rather than only the fictional waiting times. Notice that this compares **destination totals**: the reference lines are *not* averages per person or percentages of applications.
+
+```{r}
+#| label: fig-host-centre
+#| fig-cap: "Reported 2022 refugee stock across included destination entities, with mean (solid) and median (dashed) on the same count scale."
+
+ggplot(hosts, aes(x = refugee_stock / 1e6)) +
+  geom_histogram(bins = 25, fill = "#89bad1", color = "white") +
+  geom_vline(xintercept = mean(hosts$refugee_stock) / 1e6,
+             color = "#bd5226", linewidth = 1) +
+  geom_vline(xintercept = median(hosts$refugee_stock) / 1e6,
+             color = "#1f6945", linetype = "dashed", linewidth = 1) +
+  labs(
+    x = "Recorded refugee stock (millions)",
+    y = "Destination entities",
+    subtitle = "Orange solid = mean; green dashed = median"
+  ) +
+  theme_minimal()
+```
+
+Are the two lines close? If not, how would you explain the difference? **A higher mean than median is consistent with right skew, but this comparison alone does not fully characterize the distribution.** Inspect the bars and unusual values too.
+
+## Boxplots: centre, spread and unusual observations
+
+A boxplot is a compact summary of a numeric distribution. It usually displays:
+
+- The **median** (line inside the box).
+- The **first and third quartiles** (bottom and top of the box).
+- The **interquartile range (IQR)**, which is the box's height.
+- **Whiskers**, usually extending to the most extreme observations no more than 1.5 × IQR beyond the hinges.
+- Values beyond the whiskers, plotted individually as **potential outliers**.
+
+### Start with the fictional waiting times
+
+```{r}
+#| label: fig-waiting-boxplot
+#| fig-cap: "Boxplot of ten fictional waiting times; an extreme value is not automatically a data error."
+
+ggplot(waiting_times, aes(x = "Fictional cases", y = days)) +
+  geom_boxplot(fill = "#89bad1", width = 0.35) +
+  geom_jitter(width = 0.07, height = 0, alpha = 0.65, size = 2) +
+  labs(x = NULL, y = "Days until decision") +
+  theme_minimal()
+```
+
+`geom_jitter()` adds the actual points with slight horizontal displacement so they do not overlap. With only ten cases, it is better **not** to rely on the box alone: plotting the individual values gives readers more information.
+
+::: {.callout-warning title="A boxplot outlier is not an erroneous observation"}
+An extreme value could represent a genuine case, a recording mistake, or a different procedure. Investigate it before excluding it. The “1.5 × IQR” rule is a **display convention**, not a scientific definition of error.
+:::
+
+### Now look at the UNHCR destinations
+
+```{r}
+#| label: fig-host-boxplot
+#| fig-cap: "Boxplot of reported refugee stocks across included destination entities in 2022."
+
+ggplot(hosts, aes(x = "2022", y = refugee_stock / 1e6)) +
+  geom_boxplot(fill = "#89bad1", width = 0.35) +
+  labs(x = NULL, y = "Recorded refugee stock (millions)") +
+  theme_minimal()
+```
+
+With highly unequal country-level counts, the central box can appear compressed because the axis must accommodate very large observations. That itself is useful information: **the country-level totals vary substantially**.
+
+## Log scales: making extremely unequal values legible
+
+A logarithmic transformation can make a highly skewed display easier to inspect, but it also changes the visual meaning of distance. For positive values, equal distances on a base-10 log scale correspond to equal **multiplicative ratios**, rather than equal differences in people.
+
+Here we use `log10(stock + 1)` so recorded zeros remain defined:
+
+```{r}
+#| label: fig-host-boxplot-log
+#| fig-cap: "Same included destinations, displaying log10(reported stock + 1); the underlying observations have not changed."
+
+ggplot(hosts, aes(x = "2022", y = log10(refugee_stock + 1))) +
+  geom_boxplot(fill = "#89bad1", width = 0.35) +
+  labs(x = NULL, y = "log10(refugee stock + 1)") +
+  theme_minimal()
+```
+
+Do not say “one unit higher means one more refugee.” On the transformed scale, the relationship is **multiplicative**. Always make the transformation visible in the axis label and explain it in the caption or text.
+
+::: {.callout-note title="A transformation is not a change in the unit of analysis"}
+The boxplot still contains one value per **included destination entity**. We have transformed the plotted *values*, not combined countries, changed years or created more observations. If you instead **filter** out countries, you really have changed the population being described.
+:::
+
+## Comparing groups: colours, facets and positions
+
+So far, each figure displays a single distribution or category comparison. Often we want to ask whether a pattern differs **between groups**.
+
+### Facets: repeat the same graph for each group
+
+For illustration, construct destination-year totals for 2020 and 2022. We must **aggregate origins within each destination and year**, never sum refugee stocks across the two years.
+
+```{r}
+host_year <- refugees::population |>
+  filter(year %in% c(2020, 2022), !is.na(coa_iso), coa_iso != "") |>
+  group_by(year, coa_iso, coa_name) |>
+  summarise(
+    refugee_stock = if (all(is.na(refugees))) NA_real_
+                    else sum(refugees, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  filter(!is.na(refugee_stock)) |>
+  mutate(log10_stock_plus1 = log10(refugee_stock + 1))
+
+head(host_year)
+```
+
+```{r}
+#| label: fig-facet-years
+#| fig-cap: "Separate distributions of destination-level reported refugee stocks in 2020 and 2022, both shown on the same transformed horizontal scale."
+
+ggplot(host_year, aes(x = log10_stock_plus1)) +
+  geom_histogram(binwidth = 0.5, fill = "#2475a6", color = "white") +
+  facet_wrap(~ year) +
+  labs(
+    x = "log10(refugee stock + 1)",
+    y = "Number of destination entities",
+    title = "Comparing distributions across two years"
+  ) +
+  theme_minimal()
+```
+
+`facet_wrap(~ year)` creates a separate panel for each year. The same horizontal scale makes comparisons more meaningful, but changing coverage, definitions, and the set of reporting entities can still affect differences. The two panels do **not** follow the same individuals.
+
+### Stacked versus side-by-side bars
+
+A stacked bar shows how categories add to a total, whereas a side-by-side bar makes individual categories easier to compare. Consider a deliberately **fictional** table of decision outcomes with the same reporting unit:
+
+```{r}
+toy_outcomes <- tibble::tibble(
+  destination = c("A", "B", "C"),
+  recognized = c(60, 45, 25),
+  rejected = c(40, 55, 75)
+) |>
+  pivot_longer(
+    cols = c(recognized, rejected),
+    names_to = "outcome",
+    values_to = "decisions"
+  )
+
+toy_outcomes
+```
+
+```{r}
+#| label: fig-stacked-decisions
+#| fig-cap: "Fictional outcomes plotted as stacked bars; the totals can be read from bar heights."
+
+ggplot(toy_outcomes, aes(x = destination, y = decisions, fill = outcome)) +
+  geom_col() +
+  labs(x = "Fictional destination", y = "Fictional decisions") +
+  theme_minimal()
+```
+
+```{r}
+#| label: fig-dodged-decisions
+#| fig-cap: "The same fictional outcomes shown side by side to facilitate comparing each category."
+
+ggplot(toy_outcomes, aes(x = destination, y = decisions, fill = outcome)) +
+  geom_col(position = "dodge") +
+  labs(x = "Fictional destination", y = "Fictional decisions") +
+  theme_minimal()
+```
+
+The stacked and side-by-side figures contain **identical invented data**. When totals differ across groups, a third option is to show **within-group proportions**:
+
+```{r}
+#| label: fig-proportional-decisions
+#| fig-cap: "Fictional outcomes shown as proportions of each destination's two illustrated decision categories."
+
+ggplot(toy_outcomes, aes(x = destination, y = decisions, fill = outcome)) +
+  geom_col(position = "fill") +
+  scale_y_continuous(labels = scales::label_percent()) +
+  labs(x = "Fictional destination", y = "Share of illustrated decisions") +
+  theme_minimal()
+```
+
+`position = "fill"` rescales every bar to 100%. Its denominator is the **sum of the outcome categories appearing in that bar**. If the substantive question concerns recognition *rates*, we must still define which categories belong in the numerator and denominator, ensure the reporting units are compatible, and distinguish decisions from new applications (see the later asylum-decisions section).
+
+## Relationships: scatterplots and covariation
+
+EDA also asks whether **two numeric variables vary together**. Scatterplots place one observation at each pair of coordinates. In the next example, **each point is one included destination** in 2022, and **both axes are population stocks**.
+
+```{r}
+#| label: fig-stock-scatterplot
+#| fig-cap: "Association between reported refugee and asylum-seeker stocks across destination entities in 2022; both axes are log10(count + 1)."
+
+hosts_scatter <- hosts |>
+  filter(!is.na(asylum_seeker_stock))
+
+ggplot(
+  hosts_scatter,
+  aes(x = log10(refugee_stock + 1),
+      y = log10(asylum_seeker_stock + 1))
+) +
+  geom_point(alpha = 0.55, size = 2, color = "#2475a6") +
+  labs(
+    x = "log10(refugee stock + 1)",
+    y = "log10(asylum-seeker stock + 1)",
+    title = "How do two population categories vary across destinations?"
+  ) +
+  theme_minimal()
+```
+
+Some destinations may have larger values on both axes, but the graph cannot tell us whether one stock *causes* the other. Neither axis is the number of new asylum applications filed in 2022. 
+
+## A good graph needs good labels, scales and captions
+
+A figure intended for research should usually answer these questions without requiring readers to inspect the R code:
+
+| Element | What to clarify |
+|---|---|
+| Title | The specific comparison or research question |
+| Axis labels | What variable is plotted and in what units? |
+| Time | Which year or period? |
+| Population | Origin countries, destinations, cases, persons, decisions? |
+| Measure | Stock, flow, applications, outcomes, percentage? |
+| Scale | Linear or transformed (e.g. logarithmic)? |
+| Source and exclusions | Where do the numbers come from, and what was omitted? |
+
+### Save a graph reproducibly
+
+When you are happy with a graph, save it from the script rather than relying on a screenshot from the RStudio plot panel. The following command creates an image file inside your project (it is not executed automatically when building the book):
+
+```{r}
+#| eval: false
+
+ggsave(
+  filename = "figures/origins-2022.png",
+  plot = p_origins,
+  width = 9,
+  height = 5,
+  dpi = 300
+)
+```
+
+The `plot = p_origins` argument selects the graph saved earlier; `width`, `height`, and `dpi` control the exported image's dimensions and resolution. You can reproduce the figure by rerunning the script.
+
+## How to read a graph critically: a checklist
+
+Before accepting a figure in a report or publication, check:
+
+1. **Observation:** what does one plotted row or point represent?
+2. **Measurement:** is this a count, a rate, a stock, or a flow?
+3. **Selection:** have we plotted all observations or only selected ones?
+4. **Missingness:** were incomplete or suppressed values silently dropped?
+5. **Aggregation:** were origins combined into destinations correctly, within the same year?
+6. **Distribution:** what do the median, spread, skewness and unusual values look like?
+7. **Design:** could bins, a transformed scale, or category order influence the interpretation?
+8. **Inference:** are we describing a pattern, or claiming more than the data support?
+
+An attractive figure is not a substitute for a defensible **analytical unit** and a clearly defined **denominator**.
+
+## Exercises: predict → run → describe → question
+
+### A. Learn the grammar of graphics
+
+1. Start from the ten-origin bar chart. Remove `geom_col()` and describe what remains. Why?
+2. Change the **fixed** fill colour. Did the numbers change? Now map `fill = size_group` inside `aes()`. What changed besides the colours?
+3. Compare `geom_bar()` and `geom_col()` on the ten-origin example. Which counts **rows**, and which displays already computed numbers of **people**?
+4. Remove `reorder()` from the bar chart. How is the axis ordered now? Which ordering would communicate the comparison more clearly?
+5. Recreate the origin chart using `geom_point()`. Write one reason to prefer bars and one reason to prefer dots.
+
+### B. Explore distributions and skewness
+
+6. For `waiting_times`, predict the relative position of the mean and median, then identify their lines on @fig-waiting-times. Why is the distribution right-skewed?
+7. Change the final fictional waiting time from 1,030 days to 600 days. Recalculate the mean and median. Which statistic is more sensitive? Why?
+8. Compare the three shapes in @fig-three-shapes. Identify the direction of the long tail, and explain why the symmetric panel's mean and median lines overlap.
+9. Redraw the destination histogram using `bins = 10`, `bins = 25`, and `bins = 40`. Which conclusions stay stable and which details move?
+10. Explain why the y-axis of a histogram is **destinations**, whereas the y-axis of the origin bar chart is a list of **countries of origin**.
+11. Draw a boxplot of `waiting_times$days` and identify the median, box, whiskers, and any potential outlier. Is an outlier necessarily a data error?
+12. Compare the raw and log-transformed destination boxplots. Are the underlying destination entities different? Why do they look different?
+
+### C. Compare groups and detect mistakes
+
+13. Change `facet_wrap(~ year)` to `facet_wrap(~ year, scales = "free_x")`. Why might independent axes make cross-panel comparisons harder?
+14. Explain the difference between the fictional stacked and dodged outcome figures. Would either one automatically measure the likelihood that an applicant receives protection?
+15. Recreate the fictional outcome figure with `position = "fill"`. What is the denominator inside each bar, and why should it not automatically be called the chance of recognition?
+16. Draw a scatterplot of the **untransformed** `refugee_stock` and `asylum_seeker_stock`. Compare it with @fig-stock-scatterplot. Does the transformation change the underlying data points?
+17. Find the five largest destination totals in `hosts`. Are all labels unambiguously sovereign states? What should you check before writing a publication-ready caption?
+
+### D. Independent challenge
+
+18. Produce **one defensible chart** answering the question “How are reported 2022 refugee stocks distributed across the destination entities included in our derived table?” Include a title, units, year, source, and a note on missing values. Below it, write **three sentences**: what the plot shows, what it does not establish, and one additional data-quality check you would perform.
+
+::: {.callout-tip title="Take-home check"}
+You are ready to proceed when you can tell someone **what one dot, bar or box represents**, explain why a right-skewed distribution often has a mean above its median, and defend your choice of axes, units, and graph type. You should also be able to say what your graph **cannot** establish.
+:::
+
+**Further reading:** [R for Data Science: Layers](https://r4ds.hadley.nz/layers.html) and [Exploratory data analysis](https://r4ds.hadley.nz/EDA.html).

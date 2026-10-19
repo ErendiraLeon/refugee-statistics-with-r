@@ -1,0 +1,419 @@
+---
+title: "Your first steps in R"
+subtitle: "Understanding R code: values, objects, functions, vectors and missing observations"
+---
+
+::: {.callout-note title="Learning goals"}
+By the end of this section, you should be able to **read a simple line of R code**, distinguish values, objects, names, functions and arguments, create and inspect vectors, select individual values, recognize common data types, and work cautiously with missing observations (`NA`). You should also be able to explain **what a number measures and what its denominator is**.
+:::
+
+## Before we begin: learning to read R code
+
+In the previous chapter, we installed R and RStudio, created a script, and learned how to run commands. Now we will learn what those commands actually mean. We will use a small, **entirely fictional** example of asylum applications received by five administrative offices. There are only five numbers so that we can concentrate on the language instead of getting lost in a large dataset. We will work with real UNHCR data in the following chapters.
+
+Programming involves giving the computer precise instructions. R cannot guess what we meant if we misspell a name or forget a comma. Fortunately, much of introductory R follows a small number of patterns that we can learn gradually.
+
+### Values, calculations and results
+
+A **value** is a piece of information. For example, `12` is a number, while `"Germany"` is a piece of text. R can immediately evaluate expressions involving values:
+
+```{r}
+12 + 18
+(12 + 18) / 2
+```
+
+Here `+` adds, `/` divides, and parentheses indicate which calculation should be done first. R prints the result underneath the command. The `[1]` that you may see in the output is **not part of the answer**: it marks the position of the first displayed element.
+
+For now, notice the distinction between **the command you write** and **the result R returns**. Later, we will often want to save results for reuse rather than just display them.
+
+## Giving things names: objects and assignment
+
+Imagine that we know an office received `12` applications. We could simply type `12` whenever we need this figure, but that quickly becomes inconvenient. Instead, we can store it under a name:
+
+```{r}
+applications_office_a <- 12
+applications_office_a
+```
+
+Read the first line as: *"applications_office_a gets the value 12."*
+
+Let's break it down:
+
+| Part of the code | What it means |
+|---|---|
+| `applications_office_a` | The **name** we choose |
+| `<-` | The **assignment operator**: store the result on the right under the name on the left |
+| `12` | The **value** being stored |
+| `applications_office_a` on its own | Ask R to display the stored value |
+
+An **object** is something stored in R's memory. A **name** is how we refer to it. You can think of a name as a label attached to a box, while the object is what is stored in that box. In practice, beginners often say *"the object `applications_office_a`"*, meaning the object referred to by that name.
+
+Assigning a result usually does not print it. Type the object's name on a new line when you want to inspect it. You should also see the name appear in the **Environment** pane in RStudio. The Environment shows objects that exist in the current session; it is not the same thing as a saved script.
+
+### Names are not the same as text values
+
+Compare these two commands:
+
+```{r}
+applications_office_a
+"applications_office_a"
+```
+
+The **unquoted** name asks R to retrieve the value we stored (12). The **quoted** text is simply the word `applications_office_a` itself. Quotation marks matter because R treats text and object names differently.
+
+### Choosing clear names
+
+You decide what to call your objects. R does not know that the word `applications` refers to asylum applications: that is a meaning **we** give the name. Good names help both you and your colleagues understand the analysis.
+
+We recommend lowercase **snake_case**, with underscores between words:
+
+```r
+applications_2022
+country_of_origin
+total_refugees
+```
+
+Names are **case-sensitive**: `applications` and `Applications` are different names. Ordinary syntactic names start with a letter (or a dot not followed by a digit) and may contain letters, numbers, underscores and dots. For now, simply start with a letter and use underscores. Avoid spaces, names beginning with numbers, and names such as `mean` that could be confused with common function names.
+
+For instance, R would not treat `total_applications` and `total_application` as the same object. A tiny typo can produce an **object not found** error.
+
+::: {.callout-tip title="Two useful RStudio shortcuts"}
+Press **Alt + -** (Windows/Linux) or **Option + -** (macOS) to insert `<-`. When typing a name you created, press **Tab** to see possible completions. Autocompletion helps avoid spelling mistakes.
+:::
+
+### Objects can be updated
+
+Once an object exists, we can use it in a calculation and save a new result:
+
+```{r}
+applications_office_b <- 18
+total_two_offices <- applications_office_a + applications_office_b
+total_two_offices
+```
+
+R first finds the stored values of the two objects, adds them, and stores the result in `total_two_offices`. We could also assign a new value to an existing name:
+
+```{r}
+applications_office_a <- 13
+applications_office_a
+```
+
+This **replaces the value currently associated with that name**. It does not rewrite previously executed calculations: `total_two_offices` still contains the earlier result until we calculate it again. This is one reason why running scripts from the beginning is important.
+
+We will use a fresh vector in the next section, so this temporary change does not affect the later examples.
+
+## One object, several values: vectors
+
+An object does not have to contain just one number. It can also hold a **vector**, which is a sequence of values. Imagine that five fictional offices received the following numbers of asylum applications:
+
+```{r}
+applications <- c(12, 18, 9, 25, 16)
+applications
+```
+
+Here:
+
+- `applications` is the name of the object.
+- `<-` assigns the result to that name.
+- `c()` is a function that **combines** the five values into a vector.
+- The commas separate the values.
+- Each value is one element of the vector.
+
+A vector is especially useful because we can calculate with all its elements without writing separate commands for each office.
+
+For example, multiplying by two applies to every value:
+
+```{r}
+applications * 2
+```
+
+This is known as a **vectorized operation**. Notice that this calculation displays new values but does **not** change `applications`. To save a result, we would assign it to an object.
+
+::: {.callout-note title="One name does not mean one observation"}
+`applications` is **one R object**, but it contains **five numbers**. An object can contain a single value, a vector of values, or even a whole table. We will distinguish tables and their columns later in this chapter.
+:::
+
+## What are functions and arguments?
+
+R uses **functions** to carry out tasks. A function has a name followed by parentheses. We provide the information it needs inside those parentheses; this information is called its **arguments**.
+
+Consider three functions that come with R:
+
+```{r}
+length(applications)
+sum(applications)
+mean(applications)
+```
+
+| Function | What it asks R to do | How to interpret the result |
+|---|---|---|
+| `length(applications)` | Count the elements of the vector | Five offices are represented |
+| `sum(applications)` | Add the five values | Total applications across these five offices |
+| `mean(applications)` | Calculate the arithmetic mean | Average applications per office |
+
+For example, in `mean(applications)`:
+
+- `mean` is the **function name**.
+- `(` and `)` surround its arguments.
+- `applications` is the **argument** supplied to the function; here it is the object holding our five numbers.
+
+A function is different from an ordinary data object: `mean()` performs a calculation, while `applications` supplies the data. Technically, functions are also objects in R, but it is useful at this stage to distinguish the **operation** from the **data being operated on**.
+
+### Functions can take more than one argument
+
+Some arguments are **named**. For example, `round()` can specify how many decimal places to use:
+
+```{r}
+mean(applications)
+round(mean(applications), digits = 1)
+```
+
+In `digits = 1`, the equals sign supplies a value to a **named function argument**. This is different from `<-`, which we use to assign an object, and `==`, which we will use to test equality.
+
+We can put functions inside other functions. R evaluates `mean(applications)` first, then passes that result to `round()`.
+
+::: {.callout-tip title="Useful help when writing a function"}
+Type `?mean` in the Console to open the function's documentation. When you type a function followed by `(` in RStudio, it can also suggest argument names and show a short description. The examples in this chapter use base R, so you do not need an additional package for them.
+:::
+
+## Selecting elements: positions and conditions
+
+Sometimes we only want part of a vector. We use **square brackets** `[]` to select its elements. R starts counting positions at **1**, not zero.
+
+```{r}
+applications[1]       # First value
+applications[2:4]     # Second through fourth values
+```
+
+The part inside `[]` is called an **index**. It tells R which elements to keep. The expression `2:4` generates the positions 2, 3 and 4.
+
+We can also ask R a question about each value:
+
+```{r}
+applications > 15
+```
+
+The result is a sequence of `TRUE` and `FALSE` values. This is a **logical vector**: each answer corresponds to the value at the same position in `applications`.
+
+We can use that logical vector to select observations:
+
+```{r}
+applications[applications > 15]
+```
+
+Read this as: *"From `applications`, keep only the values greater than 15."*
+
+A few comparison symbols are particularly useful:
+
+| Symbol | Meaning | Example |
+|---|---|---|
+| `>` | Greater than | `18 > 15` |
+| `<` | Less than | `9 < 15` |
+| `>=` | Greater than or equal to | `16 >= 16` |
+| `==` | Equal to | `12 == 12` |
+| `!=` | Not equal to | `12 != 18` |
+
+**Do not confuse** `<-` (assign a value) with `==` (compare values). We use `=` for named function arguments, as shown earlier.
+
+## Different kinds of information
+
+So far, most values have been numbers. But researchers also work with country names, years, labels, and yes/no information.
+
+```{r}
+countries <- c("Germany", "France", "Spain")
+years <- c(2020, 2021, 2022)
+large <- c(TRUE, FALSE, TRUE)
+
+class(countries)
+class(years)
+class(large)
+```
+
+The function `class()` tells us how R classifies each object. Here, the types are **character** (text), **numeric** (numbers), and **logical** (TRUE/FALSE).
+
+Notice the syntax:
+
+- Country names are in quotation marks because they are text values.
+- Numbers are not in quotation marks.
+- `TRUE` and `FALSE` are logical values and are not in quotation marks.
+
+The type of information matters. For example, calculating the mean of country names makes no sense, but counting how many countries meet a condition can be informative.
+
+In these examples, each vector contains values of a single basic type. We will later work with **data frames**, whose columns may have different types.
+
+## Missing is not zero
+
+Imagine that one office did not provide an application count. An **unknown or unavailable value** can be represented in R by `NA`, rather than `0`.
+
+```{r}
+applications_incomplete <- c(12, 18, NA, 25, 16)
+applications_incomplete
+mean(applications_incomplete)
+```
+
+The mean is reported as `NA` because a missing value is present. R does not automatically assume what the missing number should have been.
+
+We can ask R to ignore missing values for this calculation:
+
+```{r}
+mean(applications_incomplete, na.rm = TRUE)
+sum(is.na(applications_incomplete))
+```
+
+Let's read these unfamiliar parts:
+
+- `na.rm` is the name of a function argument meaning **remove missing values** for the calculation.
+- `TRUE` tells R to use that option.
+- `is.na()` checks which elements are missing.
+- `sum(is.na(...))` counts the missing entries because `TRUE` is treated as 1 when added and `FALSE` as 0.
+
+**Crucially, `na.rm = TRUE` does not recover the missing information.** The mean now uses only the four offices with observed values. We need to ask whether those four are comparable with the missing office.
+
+::: {.callout-warning title="A substantive distinction"}
+`NA` represents a missing value in R; `0` represents a recorded zero. In refugee-statistics sources, suppressed values, noncoverage, unavailable information, and incomplete reporting may have different meanings. Never replace all missing values with zero simply because zero makes a calculation convenient. Missing-data patterns can also bias comparisons.
+:::
+
+## From vectors to tables: data frames and variables
+
+Real datasets generally contain **several variables** describing each observation. In R, a common way to store a rectangular dataset is as a **data frame**.
+
+Let's create one using the same fictional offices:
+
+```{r}
+practice <- data.frame(
+  office = c("A", "B", "C", "D", "E"),
+  applications = c(12, 18, 9, 25, 16)
+)
+practice
+```
+
+This introduces an important distinction:
+
+| Term | In our example |
+|---|---|
+| **Object name** | `practice` names the whole table stored in R |
+| **Data frame** | The table containing offices and application counts |
+| **Variable / column** | `office` and `applications` are the column names |
+| **Observation / row** | Each row describes one office |
+| **Unit of analysis** | An office |
+| **Value / cell** | For example, `18` in the applications column for office B |
+
+The `data.frame()` function constructs the table. Inside it, `office = ...` and `applications = ...` are **named arguments that create columns**. This is not the same as writing `applications <- ...` to create or replace an object in the wider R environment.
+
+### A column and a separate object can have the same name
+
+We already created a vector object named `applications`. Now our table `practice` also has a **column** called `applications`. These are distinct things.
+
+To refer explicitly to the table's column, write:
+
+```{r}
+practice$applications
+mean(practice$applications)
+```
+
+Read `practice$applications` as: *"the applications column belonging to the data frame `practice`."* The dollar sign `$` selects a named component of a table (or list). It is not a currency symbol here.
+
+To inspect a data frame, useful commands include:
+
+```{r}
+names(practice)     # Column names
+nrow(practice)      # Number of rows
+ncol(practice)      # Number of columns
+str(practice)       # Structure and types of columns
+```
+
+A row in this table corresponds to **one office**, not one individual applicant or one asylum decision. If we recorded applications for several years, we would need to specify whether one row represented an *office* or an *office-year*. This is the **unit of analysis**, and it matters for interpreting statistics.
+
+::: {.callout-note title="A useful distinction for our future work"}
+A **dataset** is the collection of information we study; a **data frame** is one way to represent that dataset in R. A **variable** is a measured characteristic, usually represented by a column. An **object** is what R stores under a name. The same data frame may contain many variables while remaining one named R object.
+:::
+
+## Calculating shares: always ask about the denominator
+
+We can add a new column to our practice table. Suppose we want to know what percentage of the applications across these **five fictional offices** came from each office:
+
+```{r}
+practice$share <- 100 * practice$applications /
+  sum(practice$applications)
+practice
+```
+
+Again, read the left-hand side as: *"create or update a column called `share` in `practice`."* On the right-hand side, each office's applications are divided by the **total** across the five offices, then multiplied by 100.
+
+For example, office A contributes `12` applications out of a total of `80`, so its share is `15%`.
+
+```{r}
+sum(practice$share)
+```
+
+The shares add up to 100%, apart from possible rounding effects. But be careful about the interpretation: the denominator is **only the five offices in our invented dataset**, not all asylum applications in a country.
+
+::: {.callout-tip title="Every percentage needs a denominator"}
+When interpreting a percentage, always ask: **"A percentage of what?"** Also ask *when*, *where*, and *for which population* the numerator and denominator were measured. Calculating a percentage correctly does not guarantee that it is a meaningful indicator.
+:::
+
+## Reading unfamiliar R code: a quick reference
+
+Many errors arise from confusing symbols. You do not have to memorize everything at once; return to this table when needed.
+
+| Code or symbol | Read it as | Example |
+|---|---|---|
+| `#` | Start of a comment | `# Fictional data` |
+| `"..."` | A text value | `"Germany"` |
+| `<-` | Assign to a name | `x <- 12` |
+| `()` | Supply arguments to a function | `mean(applications)` |
+| `c()` | Combine elements into a vector | `c(12, 18, 9)` |
+| `[]` | Select elements | `applications[1]` |
+| `$` | Select a named column/component | `practice$applications` |
+| `==` | Check whether values are equal | `12 == 12` |
+| `NA` | Missing value | `c(12, NA, 9)` |
+
+### A common beginner error: names and capitalization
+
+Try to predict what would happen here, but **do not execute the second line as part of rendering this book**:
+
+```r
+my_applications <- 12
+My_applications
+```
+
+R will say that `My_applications` was not found. The capital `M` makes it a different name. The correction is to type `my_applications` exactly as it was created.
+
+When in doubt, inspect the **Environment** pane and check the spelling, capitals, punctuation, and whether the line creating the object has actually run.
+
+## Exercises: predict → run → explain
+
+Use the script you created in the previous chapter. For each task, first **predict** what will happen, then run the code, and finally explain the result in ordinary language. All the numbers below are fictional.
+
+### Part A. Objects and names
+
+1. Without running it, predict the result of `mean(c(2, 4, 8))`. Then verify your answer in R.
+2. Create an object named `recognitions` containing `8, 11, 3, 15, 9`. Display the vector by typing its name.
+3. Explain the difference between `recognitions` and `"recognitions"`.
+4. What happens if you type `Recognitions` with a capital `R`? Why?
+
+### Part B. Functions and vectors
+
+5. Use functions to calculate the **sum, minimum, maximum and median** of `recognitions`. Use `?median` if necessary.
+6. Explain what `applications[1]` returns, compared with `applications[applications > 15]`.
+7. What is the difference between `recognitions <- 10` and `recognitions == 10`? **Do not overwrite** your original vector unless you intend to; you can recreate it afterward.
+
+### Part C. Missing values
+
+8. Replace the **third element** of `recognitions` with `NA` using `recognitions[3] <- NA`. What happens to `mean(recognitions)`?
+9. Calculate the mean again using `na.rm = TRUE`. Explain **which observations are included** and why this does not restore the missing value.
+
+### Part D. Tables and interpretation
+
+10. In the `practice` table, identify the **object name**, **two original variables**, **number of observations**, and **unit of analysis**.
+11. Explain the difference between `applications` and `practice$applications`.
+12. Create a fictional column `practice$recognized` containing `8, 11, 3, 15, 9`. Calculate `100 * practice$recognized / practice$applications` and explain what each row's percentage would represent **if** numerators and denominators referred to the same set of cases.
+13. Suppose the recognition decisions occurred in the same calendar year as the application counts, but do not necessarily concern the same applicants. Is the resulting percentage necessarily a valid recognition rate? **No.** We will return to the mismatch between application cohorts and decision cohorts in the later chapter on asylum decisions.
+
+::: {.callout-tip title="Take-home check"}
+You understand this section when you can explain **what each part of a simple command does**; create and name a vector; use a function; distinguish a table from its columns; calculate a mean; and explain why a missing observation is different from a recorded zero—without copying code you do not understand.
+:::
+
+::: {.callout-note title="Further reading"}
+For another introduction to R expressions, assignment, comments, object names and functions, see [*R for Data Science*, Chapter 2: Workflow: basics](https://r4ds.hadley.nz/workflow-basics.html). The examples in that chapter use general data-science contexts; here we use fictional asylum-statistics examples before moving to UNHCR data.
+:::
