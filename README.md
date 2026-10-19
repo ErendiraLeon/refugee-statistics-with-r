@@ -2,7 +2,7 @@
 
 A beginner-friendly **Quarto book** by Eréndira León-Salvador, Postdoctoral Research Fellow, ERC RefLex (*Is International Refugee Law Effective?*), UCD College of Social Sciences & Law. Contact: erendira.leonsalvador@ucd.ie.
 
-This project teaches statistics and reproducible R workflows through UNHCR refugee data. It has numbered chapters, runnable R code chunks, outputs and figures generated during rendering, exercises and collapsible selected solutions.
+This project teaches statistics and reproducible R workflows through UNHCR refugee data. It has numbered sections, runnable R code chunks, outputs and figures generated during rendering, exercises and collapsible selected solutions.
 
 ## Quick start (RStudio)
 
@@ -24,19 +24,9 @@ This project teaches statistics and reproducible R workflows through UNHCR refug
 
 If the first render fails at an `install.packages` error, install the package in the R console and rerun. If you see an error about missing `quarto`, install Quarto CLI and restart RStudio.
 
-## Publish to GitHub Pages (recommended: GitHub Actions)
 
-1. Create a new GitHub repository (for example `refugee-statistics-with-r`).
-2. Add **all files**, including the hidden `.github/workflows/publish.yml` file and `data/` assets, then push them to the `main` branch.
-3. On GitHub: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
-4. The provided workflow installs R and the book's packages, executes Quarto chunks to generate the plots, uploads `docs/`, and publishes the site on every push to `main`.
-5. Follow the repository **Actions** tab to see whether the build passed. A Pages URL will appear after successful deployment.
 
-The first build may need adjustment if an upstream dependency changes; the workflow has **not** been executed by this delivery environment.
 
-## Why not simply publish the source `.qmd` files?
-
-A `.qmd` file holds code and narrative, but an online reader needs a rendered HTML site to see the figures and printed R outputs. The workflow builds that HTML using R. GitHub Pages then serves only static HTML/CSS/JS—it does not run R for visitors.
 
 ## Dataset definitions and limitations
 
@@ -59,12 +49,5 @@ A `.qmd` file holds code and narrative, but an online reader needs a rendered HT
 
 ## Editorial note
 
-The content is an original educational work. It draws inspiration from the teaching approach of *R for Data Science*, not its copyrighted prose or illustrations. This is not an official UNHCR data product or a UCD institutional statement.
+The content is an original educational source. It draws inspiration from the teaching approach of *R for Data Science*, not its copyrighted prose or illustrations. This is not an official UNHCR data product or a UCD institutional statement.
 
-## A preview of two figures
-
-The figures below are **illustrative preview exports**, provided so that you can see the output style even before installing Quarto. In the published book, R code chunks generate their own charts from the underlying data.
-
-![Ten origin countries in the published 2022 teaching example](figures/preview-origins-2022.png)
-
-![Five fictional countries used to teach total protection rates](figures/preview-toy-decisions.png)
